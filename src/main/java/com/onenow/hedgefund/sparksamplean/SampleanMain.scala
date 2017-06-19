@@ -27,9 +27,6 @@ val deployEnv = "STAGING";
 val region = "us-east-1" // Kinesis.defaultRegion
 val endPoint = "https://kinesis.us-east-1.amazonaws.com"
 
-val AWS_ACCESS_KEY_ID = "AKIAJ2TWLESHWGQDXTEA"
-val AWS_SECRET_KEY = "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"
-
 val streamName = serviceType.toString + "-" + deployEnv
 // val kinRead = new Kinesis(serviceType, deployEnv, region, AWS_ACCESS_KEY_ID, AWS_SECRET_KEY);
 // val kinesisClient = kinRead.getClient

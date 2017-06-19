@@ -18,11 +18,13 @@
     <this.mainClass>${this.groupId}.${this.package}.${this.main}Main</this.mainClass>
 
     <!-- VERSIONS -->
-    <version.genison>0.93</version.genison>
+    <version.spark-streaming-kinesis-asl_2.11>2.1.1</version.spark-streaming-kinesis-asl_2.11>
+    <version.aws-java-sdk>1.11.78</version.aws-java-sdk>
     <version.jackson>2.7.3</version.jackson>
+
+    <version.genison>0.93</version.genison>
     <version.testng>6.9.6</version.testng>
     <scala.version>2.11.7</scala.version>
-    <version.aws-java-sdk>1.11.78</version.aws-java-sdk>
     <version.maven-scala-plugin>2.15.2</version.maven-scala-plugin>
     <version.maven-compiler-plugin>3.3</version.maven-compiler-plugin>
     <version.maven-shade-plugin>2.4.1</version.maven-shade-plugin>
@@ -153,7 +155,7 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming-kinesis-asl_2.11</artifactId>
-      <version>2.0.1</version>
+      <version>${version.spark-streaming-kinesis-asl_2.11}</version>
     </dependency>
 
     <!-- SCALA -->
@@ -346,7 +348,7 @@
         <dependency>
           <groupId>org.apache.spark</groupId>
           <artifactId>spark-streaming-kinesis-asl_2.11</artifactId>
-          <version>LATEST</version>
+          <version>${version.spark-streaming-kinesis-asl_2.11}</version>
         </dependency>
       </dependencies>
     </profile>
