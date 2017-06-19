@@ -6,10 +6,16 @@
 // also needed:
 // val AWS_ACCESS_KEY_ID =
 // val AWS_SECRET_KEY =
+//
+// monitoring: http://localhost:4040/jobs/
+//
+// example https://github.com/snowplow/spark-streaming-example-project
 
 // IMPORT THIRD PARTY
 import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import com.onenow.hedgefund.event.RecordActivity
+import com.onenow.hedgefund.util.Piping
 
 // import org.apache.spark.storage.StorageLevel
 // import org.apache.spark.streaming.kinesis.KinesisUtils
@@ -62,29 +68,34 @@ val ssc = new StreamingContext(sc, Seconds(batchIntervalSec)) // use in databric
 // https://spark.apache.org/docs/2.0.0/api/java/org/apache/spark/streaming/kinesis/KinesisUtils.html
 //
 // Create the Kinesis DStreams: credentials in the environment
-val kinesisStreams = (0 until numShards).map { i =>
+val kinesisDstreams = (0 until numShards).map { i =>
   KinesisUtils.createStream(ssc, serviceType.toString, streamName, endPoint,
     region.toString, initialPosition, Milliseconds(batchIntervalSec*1000), StorageLevel.MEMORY_AND_DISK_2)
 }
 // Create the Kinesis DStreams: passing AWS credentials
-//val kinesisStreams = (0 until numShards).map { i =>
+//val kinesisDstreams = (0 until numShards).map { i =>
 //  KinesisUtils.createStream(ssc, serviceType.toString, streamName, endPoint,
 //      region.toString, initialPosition, Milliseconds(batchIntervalSec*1000), StorageLevel.MEMORY_AND_DISK_2,
 //      AWS_ACCESS_KEY_ID, AWS_SECRET_KEY)
 //}
 
 // // Union all the streams, each line is Array[Byte]
-val unionStreams = ssc.union(kinesisStreams)
-// unionStreams.print()
+val unionDstream = ssc.union(kinesisDstreams)
+// unionDstream.print()
 
-val recordJsons = unionStreams.map(byteArray => new String(byteArray))
-recordJsons.print()
+val jsonDstream = unionDstream.map(byteArray => new String(byteArray))
+// jsonDstream.print()
+
+val recordDstream = jsonDstream.map(recordJson => Piping.deserialize(recordJson, classOf[RecordActivity]))
+recordDstream.print()
 
 ssc.start()
 
 // This is to ensure that we wait for some time before the background streaming job starts. This will put this cell on hold for 5 times the batchIntervalSeconds.
-ssc.awaitTerminationOrTimeout(60L *1000) // time to wait in milliseconds
+ssc.awaitTerminationOrTimeout(60L *1000) // time to wait in milliseconds; and/or run stopSparkContext above
 // ssc.awaitTermination()
 
+// FORCE STOP
+// StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop the streaming contexts without stopping the spark context
 
 
