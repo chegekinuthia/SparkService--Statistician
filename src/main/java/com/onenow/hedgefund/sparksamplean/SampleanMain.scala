@@ -53,19 +53,25 @@ StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop
 // when using spark-submit:
 // Spark context available as 'sc' (master = local[4], app id = local-1497911109319).
 // Spark session available as 'spark'
+val sc = SparkContext.getOrCreate()
 val ssc = new StreamingContext(sc, Seconds(batchIntervalSec)) // use in databricks
 
 
 // OPERATIONS: in every microbatch get the union of shard streams
 // https://spark.apache.org/docs/latest/streaming-kinesis-integration.html
 // https://spark.apache.org/docs/2.0.0/api/java/org/apache/spark/streaming/kinesis/KinesisUtils.html
-// 
-// Create the Kinesis DStreams
+//
+// Create the Kinesis DStreams: credentials in the environment
 val kinesisStreams = (0 until numShards).map { i =>
-  KinesisUtils.createStream(ssc, serviceType.toString, streamName, endPoint, 
-      region.toString, initialPosition, Milliseconds(batchIntervalSec*1000), StorageLevel.MEMORY_AND_DISK_2,
-      AWS_ACCESS_KEY_ID, AWS_SECRET_KEY)
+  KinesisUtils.createStream(ssc, serviceType.toString, streamName, endPoint,
+    region.toString, initialPosition, Milliseconds(batchIntervalSec*1000), StorageLevel.MEMORY_AND_DISK_2)
 }
+// Create the Kinesis DStreams: passing AWS credentials
+//val kinesisStreams = (0 until numShards).map { i =>
+//  KinesisUtils.createStream(ssc, serviceType.toString, streamName, endPoint,
+//      region.toString, initialPosition, Milliseconds(batchIntervalSec*1000), StorageLevel.MEMORY_AND_DISK_2,
+//      AWS_ACCESS_KEY_ID, AWS_SECRET_KEY)
+//}
 
 // // Union all the streams, each line is Array[Byte]
 val unionStreams = ssc.union(kinesisStreams)

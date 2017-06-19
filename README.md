@@ -4,7 +4,7 @@
 
 spark-shell --master local[4] --packages "org.apache.spark:spark-streaming-kinesis-asl_2.11:2.1.1"
 
-:load SampleanMain.scala
+:load SampleanMain.scala using its full path
 
 
 ### Dependency
