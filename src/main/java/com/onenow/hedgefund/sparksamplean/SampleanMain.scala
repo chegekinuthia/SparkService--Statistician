@@ -47,14 +47,12 @@ val initialPosition = InitialPositionInStream.TRIM_HORIZON // LATEST, TRIM_HORIZ
 
 
 // CONFIGURE THE STREAMING CONTEXT
-// when submitting:
-//Spark context available as 'sc' (master = local[4], app id = local-1497911109319).
-//Spark session available as 'spark'
-
 val batchIntervalSec = 5
-
 // Paste the following to stop streaming
 StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop the streaming contexts without stopping the spark context
+// when using spark-submit:
+// Spark context available as 'sc' (master = local[4], app id = local-1497911109319).
+// Spark session available as 'spark'
 val ssc = new StreamingContext(sc, Seconds(batchIntervalSec)) // use in databricks
 
 
