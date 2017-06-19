@@ -1,0 +1,371 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.onenow.hedgefund</groupId>
+  <artifactId>sparksamplean</artifactId>
+  <version>0.0.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+
+  <!-- PROPERTIES -->
+  <properties>
+
+    <!-- THIS -->
+    <this.groupId>com.onenow.hedgefund</this.groupId>
+    <this.package>sparksamplean</this.package>
+    <this.main>Samplean</this.main>
+    <this.mainClass>${this.groupId}.${this.package}.${this.main}Main</this.mainClass>
+
+    <!-- VERSIONS -->
+    <version.genison>0.93</version.genison>
+    <version.jackson>2.7.3</version.jackson>
+    <version.testng>6.9.6</version.testng>
+    <scala.version>2.11.7</scala.version>
+    <version.aws-java-sdk>1.11.78</version.aws-java-sdk>
+    <version.maven-scala-plugin>2.15.2</version.maven-scala-plugin>
+    <version.maven-compiler-plugin>3.3</version.maven-compiler-plugin>
+    <version.maven-shade-plugin>2.4.1</version.maven-shade-plugin>
+    <version.maven-jar-plugin>2.4</version.maven-jar-plugin>
+    <version.maven-assembly-plugin>2.5.5</version.maven-assembly-plugin>
+    <version.docker-maven-plugin>0.3.1</version.docker-maven-plugin>
+    <version.maven-deploy-plugin>2.8.1</version.maven-deploy-plugin>
+    <version.nexus-staging-maven-plugin>1.1</version.nexus-staging-maven-plugin>
+    <version.site-maven-plugin>0.11</version.site-maven-plugin>
+
+    <!-- build -->
+    <build.source>1.7</build.source>
+    <build.target>1.7</build.target>
+    <build.baseImage>podbox/java8</build.baseImage>
+
+    <!-- REPOSITORIES -->
+    <git.owner>pablo-tech</git.owner>
+    <github.global.server>github</github.global.server>
+    <maven.staging>maven-staging</maven.staging>
+    <nexus.repoURL>http://repo.hedge.guru/nexus</nexus.repoURL>
+
+    <!-- OTHER -->
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+  </properties>
+
+  <!-- REPOSITORY TO PULL FROM -->
+  <repositories>
+
+    <!-- OWN -->
+    <repository>
+      <id>nexus</id>
+      <url>${nexus.repoURL}/content/repositories/snapshots</url>
+      <snapshots>
+        <enabled>true</enabled>
+        <updatePolicy>always</updatePolicy>
+      </snapshots>
+    </repository>
+
+  </repositories>
+
+  <!-- DEPENDENCIES TO PULL -->
+  <dependencies>
+
+    <!-- OWN: UTIL -->
+    <dependency>
+      <groupId>${this.groupId}</groupId>
+      <artifactId>util</artifactId>
+      <version>LATEST</version>
+    </dependency>
+
+    <!-- OWN: LOGGING -->
+    <dependency>
+      <groupId>${this.groupId}</groupId>
+      <artifactId>logging</artifactId>
+      <version>LATEST</version>
+    </dependency>
+
+    <!-- OWN: EVENT -->
+    <dependency>
+      <groupId>${this.groupId}</groupId>
+      <artifactId>event</artifactId>
+      <version>LATEST</version>
+    </dependency>
+
+    <!-- OWN: DISCRETE -->
+    <dependency>
+      <groupId>${this.groupId}</groupId>
+      <artifactId>discrete</artifactId>
+      <version>LATEST</version>
+    </dependency>
+
+    <!-- TESTING -->
+    <dependency>
+      <groupId>org.testng</groupId>
+      <artifactId>testng</artifactId>
+      <version>${version.testng}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- OWN: AWS -->
+    <dependency>
+      <groupId>${this.groupId}</groupId>
+      <artifactId>aws</artifactId>
+      <version>LATEST</version>
+    </dependency>
+    <!-- OWN: AWS KINESIS -->
+    <dependency>
+      <groupId>${this.groupId}</groupId>
+      <artifactId>aws-kinesis</artifactId>
+      <version>LATEST</version>
+    </dependency>
+
+    <!-- AMAZON -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk</artifactId>
+      <version>${version.aws-java-sdk}</version>
+    </dependency>
+    <!--<dependency>-->
+    <!--<groupId>com.amazonaws.scala</groupId>-->
+    <!--<artifactId>aws-scala-sdk-kinesis</artifactId>-->
+    <!--<version>1.10.7</version>-->
+    <!--</dependency>-->
+    <!--  KINESIS -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-kinesis</artifactId>
+      <version>${version.aws-java-sdk}</version>
+    </dependency>
+    <!--<dependency>-->
+    <!--<groupId>com.amazonaws</groupId>-->
+    <!--<artifactId>amazon-kinesis-client</artifactId>-->
+    <!--<version>1.7.0</version>-->
+    <!--</dependency>-->
+    <!--<dependency>-->
+    <!--<groupId>com.amazonaws</groupId>-->
+    <!--<artifactId>amazon-kinesis-connectors</artifactId>-->
+    <!--<version>1.2.0</version>-->
+    <!--</dependency>-->
+    <!--<dependency>-->
+    <!--<groupId>com.amazonaws</groupId>-->
+    <!--<artifactId>kinesis-storm-spout</artifactId>-->
+    <!--<version>1.1.1</version>-->
+    <!--</dependency>-->
+
+    <!-- SPARK KINESIS -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-kinesis-asl_2.11</artifactId>
+      <version>2.0.1</version>
+    </dependency>
+
+    <!-- SCALA -->
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <version>${scala.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.specs</groupId>
+      <artifactId>specs</artifactId>
+      <version>1.4.3</version>
+      <scope>test</scope>
+    </dependency>
+
+
+  </dependencies>
+
+
+  <!-- BUILD -->
+  <build>
+    <plugins>
+
+      <!-- COMPILE: SCALA -->
+      <!-- http://davidb.github.io/scala-maven-plugin/example_java.html -->
+      <plugin>
+        <groupId>org.scala-tools</groupId>
+        <artifactId>maven-scala-plugin</artifactId>
+        <version>${version.maven-scala-plugin}</version>
+        <configuration>
+          <scalaVersion>${scala.version}</scalaVersion>
+          <args>
+            <arg>-target:jvm-${build.target}</arg>
+          </args>
+          <!--
+            <includes>
+              <include>src/main/scala/com/onenow/hedgefund/learner/*.scala</include>
+            </includes>
+            -->
+        </configuration>
+        <executions>
+          <execution>
+            <id>scala-compile-first</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>add-source</goal>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>scala-test-compile</id>
+            <phase>process-test-resources</phase>
+            <goals>
+              <goal>testCompile</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--  COMPILE ALL PROJECTS -->
+      <plugin>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${version.maven-compiler-plugin}</version>
+        <configuration>
+          <compilerArgument>-proc:none</compilerArgument>
+          <source>${build.source}</source>
+          <target>${build.target}</target>
+        </configuration>
+      </plugin>
+
+      <!-- DEPLOY TO LOCAL REPOSITORY-->
+      <plugin>
+        <artifactId>maven-deploy-plugin</artifactId>
+        <version>${version.maven-deploy-plugin}</version>
+        <configuration>
+          <altDeploymentRepository>internal.repo::default::file://${project.build.directory}/${maven.staging}</altDeploymentRepository>
+        </configuration>
+      </plugin>
+
+      <!-- BUILD UBER JAR -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${version.maven-shade-plugin}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+              </excludes>
+            </filter>
+          </filters>
+        </configuration>
+      </plugin>
+
+
+      <!-- BUILD DEPENDENCIES JAR -->
+      <!-- http://stackoverflow.com/questions/16222748/how-to-build-fat-jar-with-maven -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <version>${version.maven-assembly-plugin}</version>
+        <configuration>
+          <descriptorRefs>
+            <descriptorRef>jar-with-dependencies</descriptorRef>
+          </descriptorRefs>
+          <!-- CONFIGURE -->
+        </configuration>
+        <executions>
+          <execution>
+            <id>assemble-all</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--<plugin>-->
+      <!--&lt;!&ndash; DOCKER &ndash;&gt;-->
+      <!--&lt;!&ndash; https://github.com/spotify/docker-maven-plugin &ndash;&gt;-->
+      <!--&lt;!&ndash; https://docs.docker.com/installation/mac/ &ndash;&gt;-->
+      <!--&lt;!&ndash; http://docs.aws.amazon.com/AmazonECS/latest/developerguide/docker-basics.html#install_docker &ndash;&gt;-->
+      <!--<groupId>com.spotify</groupId>-->
+      <!--<artifactId>docker-maven-plugin</artifactId>-->
+      <!--<version>${version.docker-maven-plugin}</version>-->
+      <!--&lt;!&ndash; BIND TO PHASE &ndash;&gt;-->
+      <!--<executions>-->
+      <!--<execution>-->
+      <!--<phase>package</phase>-->
+      <!--<goals>-->
+      <!--<goal>build</goal>-->
+      <!--</goals>-->
+      <!--</execution>-->
+      <!--</executions>-->
+      <!--&lt;!&ndash; CONFIGURE &ndash;&gt;-->
+      <!--<configuration>-->
+      <!--<imageName>${this.package}</imageName>-->
+      <!--<baseImage>${build.baseImage}</baseImage>-->
+      <!--<entryPoint>["java", "-jar", "/${project.build.finalName}.jar"]</entryPoint>-->
+      <!--&lt;!&ndash; copy the service's jar file from target into the root directory of the image &ndash;&gt;-->
+      <!--<resources>-->
+      <!--<resource>-->
+      <!--<targetPath>/</targetPath>-->
+      <!--<directory>${project.build.directory}</directory>-->
+      <!--<include>${project.build.finalName}.jar</include>-->
+      <!--</resource>-->
+      <!--<resource>-->
+      <!--<targetPath>/</targetPath>-->
+      <!--<directory>${env.HOME}/.aws</directory>-->
+      <!--<include>credentials</include>-->
+      <!--</resource>-->
+      <!--</resources>-->
+      <!--<env>-->
+      <!--&lt;!&ndash;http://docs.aws.amazon.com/AWSSdkDocsJava/latest/DeveloperGuide/credentials.html&ndash;&gt;-->
+      <!--<AWS_CREDENTIAL_PROFILES_FILE>/credentials</AWS_CREDENTIAL_PROFILES_FILE>-->
+      <!--</env>-->
+      <!--<runs>-->
+      <!--<run>pwd</run>-->
+      <!--<run>which java</run>-->
+      <!--<run>["env"]</run>-->
+      <!--<run>ls -ltr</run>-->
+      <!--</runs>-->
+      <!--</configuration>-->
+      <!--</plugin>-->
+
+    </plugins>
+  </build>
+
+  <!-- KINESIS SPARK CONFIG -->
+  <!-- https://github.com/apache/spark/blob/master/examples/pom.xml -->
+  <!-- maven profiles: http://maven.apache.org/guides/introduction/introduction-to-profiles.html -->
+  <!-- give equivalent-but-different parameters for a set of target environments -->
+  <profiles>
+    <profile>
+      <id>kinesis-asl</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-streaming-kinesis-asl_2.11</artifactId>
+          <version>LATEST</version>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
+
+  <!-- SCALA CONFIG -->
+  <reporting>
+    <plugins>
+      <plugin>
+        <groupId>org.scala-tools</groupId>
+        <artifactId>maven-scala-plugin</artifactId>
+        <configuration>
+          <scalaVersion>${scala.version}</scalaVersion>
+        </configuration>
+      </plugin>
+    </plugins>
+  </reporting>
+
+
+
+
+</project>
