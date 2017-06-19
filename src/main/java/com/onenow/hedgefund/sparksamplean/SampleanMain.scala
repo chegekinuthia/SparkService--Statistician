@@ -1,7 +1,15 @@
+// spark-shell --master local[4] --packages "org.apache.spark:spark-streaming-kinesis-asl_2.11:2.1.1"
+// :load /Users/pablo/git/SparkService--Samplean/src/main/java/com/onenow/hedgefund/sparksamplean/SampleanMain.scala
+//
+// dependency: spark-2.1.1-bin-hadoop2.7
+//
+// also needed:
+// val AWS_ACCESS_KEY_ID =
+// val AWS_SECRET_KEY =
+
 // IMPORT THIRD PARTY
 import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
-import com.amazonaws.util.json.JSONObject
 
 // import org.apache.spark.storage.StorageLevel
 // import org.apache.spark.streaming.kinesis.KinesisUtils
@@ -39,8 +47,13 @@ val initialPosition = InitialPositionInStream.TRIM_HORIZON // LATEST, TRIM_HORIZ
 
 
 // CONFIGURE THE STREAMING CONTEXT
+// when submitting:
+//Spark context available as 'sc' (master = local[4], app id = local-1497911109319).
+//Spark session available as 'spark'
+
 val batchIntervalSec = 5
 
+// Paste the following to stop streaming
 StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop the streaming contexts without stopping the spark context
 val ssc = new StreamingContext(sc, Seconds(batchIntervalSec)) // use in databricks
 
@@ -66,7 +79,7 @@ recordJsons.print()
 ssc.start()
 
 // This is to ensure that we wait for some time before the background streaming job starts. This will put this cell on hold for 5 times the batchIntervalSeconds.
-ssc.awaitTerminationOrTimeout(batchIntervalSec * 100 * 1000)
+ssc.awaitTerminationOrTimeout(60L *1000) // time to wait in milliseconds
 // ssc.awaitTermination()
 
 
