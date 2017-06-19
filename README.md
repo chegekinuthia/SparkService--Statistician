@@ -2,9 +2,16 @@
 
 ### Run on Spark shell
 
+#### On Spark shell
+
 bash resources/startSpark.sh 
 
 :load /Users/pablo/git/SparkService--Samplean/src/main/java/com/onenow/hedgefund/sparksamplean/SampleanMain.scala
+
+#### Submitting to a Spark cluster
+
+Follow the instructions in https://spark.apache.org/docs/latest/streaming-kinesis-integration.html#running-the-example
+
 
 ### Dependency
 

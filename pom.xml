@@ -124,6 +124,7 @@
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk</artifactId>
       <version>${version.aws-java-sdk}</version>
+      <scope>provided</scope>
     </dependency>
     <!--<dependency>-->
     <!--<groupId>com.amazonaws.scala</groupId>-->
@@ -135,6 +136,7 @@
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-kinesis</artifactId>
       <version>${version.aws-java-sdk}</version>
+      <scope>provided</scope>
     </dependency>
     <!--<dependency>-->
     <!--<groupId>com.amazonaws</groupId>-->
@@ -157,6 +159,7 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-streaming-kinesis-asl_2.11</artifactId>
       <version>${version.spark-streaming-kinesis-asl_2.11}</version>
+      <scope>provided</scope>
     </dependency>
 
     <!-- SCALA -->
