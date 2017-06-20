@@ -4,9 +4,11 @@
 
 #### On Spark shell
 
+bash resources/gatherJars.sh 
+
 bash resources/startSpark.sh 
 
-:load /Users/pablo/git/SparkService--Samplean/src/main/java/com/onenow/hedgefund/sparksamplean/SampleanMain.scala
+:load job.scala 
 
 #### Submitting to a Spark cluster
 

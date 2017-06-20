@@ -86,7 +86,17 @@ val unionDstream = ssc.union(kinesisDstreams)
 val jsonDstream = unionDstream.map(byteArray => new String(byteArray))
 // jsonDstream.print()
 
-val recordDstream = jsonDstream.map(recordJson => Piping.deserialize(recordJson, classOf[RecordActivity]))
+// DESERIALIZE
+//def deserialize(json:String):RecordActivity= {
+//  Piping.deserialize(json, classOf[RecordActivity])
+//}
+
+val deserializeFunc = (json: String) => {
+  Piping.deserialize(json, classOf[RecordActivity])
+}
+
+val recordDstream = jsonDstream.map(deserializeFunc)
+// val recordDstream = jsonDstream.map(json => Piping.deserialize(json, classOf[RecordActivity]))
 recordDstream.print()
 
 ssc.start()
@@ -96,6 +106,6 @@ ssc.awaitTerminationOrTimeout(60L *1000) // time to wait in milliseconds; and/or
 // ssc.awaitTermination()
 
 // FORCE STOP
-// StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop the streaming contexts without stopping the spark context
+// StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }
 
 
