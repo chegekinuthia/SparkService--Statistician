@@ -66,6 +66,7 @@ val ssc = new StreamingContext(sc, Seconds(batchIntervalSec)) // use in databric
 // OPERATIONS: in every microbatch get the union of shard streams
 // https://spark.apache.org/docs/latest/streaming-kinesis-integration.html
 // https://spark.apache.org/docs/2.0.0/api/java/org/apache/spark/streaming/kinesis/KinesisUtils.html
+// https://spark.apache.org/docs/latest/streaming-kinesis-integration.html#running-the-example
 //
 // Create the Kinesis DStreams: credentials in the environment
 val kinesisDstreams = (0 until numShards).map { i =>
@@ -87,17 +88,66 @@ val jsonDstream = unionDstream.map(byteArray => new String(byteArray))
 // jsonDstream.print()
 
 // DESERIALIZE
-//def deserialize(json:String):RecordActivity= {
-//  Piping.deserialize(json, classOf[RecordActivity])
-//}
-
-val deserializeFunc = (json: String) => {
-  Piping.deserialize(json, classOf[RecordActivity])
+// transform: json -> RecordActivity -> (serieName, value)
+val getKVfunc = (json: String) => {
+  val record:RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
+  (record.getSerieName, record.getStoredValue.toDouble)
 }
 
-val recordDstream = jsonDstream.map(deserializeFunc)
+val kvDstream = jsonDstream.map(getKVfunc)
 // val recordDstream = jsonDstream.map(json => Piping.deserialize(json, classOf[RecordActivity]))
-recordDstream.print()
+kvDstream.print()
+
+// calculate the average
+// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
+// http://spark.apache.org/docs/latest/api/python/pyspark.html?highlight=reducebykey
+// https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
+// https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
+// sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
+val getMeanFunc = (kv:(String,Int)) => {
+
+}
+
+// WINDOW
+val kValuesWindowDstream10 = kvDstream.window(Seconds(batchIntervalSec*10))
+
+// SLIDING FUNCTIONS
+val addNewFunc = (x: Double, y:Double) => {
+  x+y
+}
+val subOldFunc = (x: Double, y:Double) => {
+  x-y
+}
+
+// REDUCE
+val batchMultiple = 10
+val windowSize = Seconds(batchIntervalSec*batchMultiple)
+val slideDuration = Seconds(batchIntervalSec)
+
+//kvDstream.reduceByWindow(reduceFn, windowDuration = Seconds(batchIntervalSec*batchMultiple), slideDuration = Seconds(batchIntervalSec))
+
+val kvSumDStream = kvDstream.reduceByKeyAndWindow(  // key not mentioned
+  addNewFunc,       // Adding elements in the new batches entering the window
+  subOldFunc,       // Removing elements from the oldest batches exiting the window
+  // {(x, y) => x + y}, // Adding elements in the new batches entering the window
+  // {(x, y) => x - y}, // Removing elements from the oldest batches exiting the window
+  windowSize,        // Window duration
+  slideDuration)     // Slide duration
+kvSumDStream.print()
+
+// reduceByKey
+//(SPY-STOCK-TRADED,ArrayBuffer(244.05, 244.05, 244.05, 244.05, 244.05, 244.04, 244.04, 244.04, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.04, 244.04, 244.05, 244.05, 244.05, 244.04, 244.05, 244.05, 244.05, 244.04, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.07, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.04, 244.03, 244.04, 244.04, 244.04, 244.03, 244.03, 244.06, 244.03, 244.05, 244.04, 244.03, 244.04, 244.03, 244.04, 244.03, 244.04, 244.04, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.02, 244.01, 244.01, 244.01, 244.02, 244.03, 244.03, 244.02, 244.02, 244.02, 244.01, 244.01, 244.01, 244.02, 244.02, 244.01, 244.01, 244.02, 244.01, 244.01, 244.02, 244.02, 244.01, 244.02, 244.01, 244.01, 244.06, 244.01, 244.01, 244.02, 244.02, 244.03))
+val kValuesDstream = kValuesWindowDstream10.groupByKey()
+val kSumDstream = kvDstream.reduceByKey(_+_)  // add up values
+// kSumDstream.print()
+val kSizeDstream = kValuesDstream.map(kv => (kv._1, kv._2.size))  // count values
+// kSizeDstream.print()
+
+// To make sure data is not deleted by the time we query it interactively
+ssc.remember(Minutes(1))
+
+ssc.checkpoint("/Users/Shared/")
+
 
 ssc.start()
 
