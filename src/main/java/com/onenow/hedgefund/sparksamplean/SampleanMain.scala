@@ -88,7 +88,7 @@ val unionDstream = ssc.union(kinesisDstreams)
 val jsonDstream = unionDstream.map(byteArray => new String(byteArray))
 // jsonDstream.print()
 
-// DESERIALIZE
+// DESERIALIZE AND FILTER
 // transform: json -> RecordActivity
 val deserializefunc = (json: String) => {
   val record:RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
@@ -103,45 +103,16 @@ val getKVfunc = (record: RecordActivity) => {
   (record.getSerieName, record.getStoredValue.toDouble)
 }
 
-
 val priceRecordsDstream =jsonDstream.map(deserializefunc).filter(isPricefunc)
 val kvDstream = priceRecordsDstream.map(getKVfunc)
-kvDstream.print()
+// kvDstream.print()
 
-// calculate the average
-// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
-// http://spark.apache.org/docs/latest/api/python/pyspark.html?highlight=reducebykey
-// https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
-// https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
-// sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
+// CALCULATE THE MEAN: WINDOWED STREAMING
+val kValuesWindowDstream10 = kvDstream.window(Seconds(batchIntervalSec*10))
+
 val getMeanFunc = (kv:(String,Int)) => {
 
 }
-
-// WINDOW
-val kValuesWindowDstream10 = kvDstream.window(Seconds(batchIntervalSec*10))
-
-// SLIDING FUNCTIONS
-val addNewFunc = (x: Double, y:Double) => {
-  x+y
-}
-val subOldFunc = (x: Double, y:Double) => {
-  x-y
-}
-
-// REDUCE
-val batchMultiple = 10
-val windowSize = Seconds(batchIntervalSec*batchMultiple)
-val slideDuration = Seconds(batchIntervalSec)
-
-//kvDstream.reduceByWindow(reduceFn, windowDuration = Seconds(batchIntervalSec*batchMultiple), slideDuration = Seconds(batchIntervalSec))
-
-val kvSumDStream = kvDstream.reduceByKeyAndWindow(  // key not mentioned
-  addNewFunc,       // Adding elements in the new batches entering the window
-  subOldFunc,       // Removing elements from the oldest batches exiting the window
-  windowSize,        // Window duration
-  slideDuration)     // Slide duration
-// kvSumDStream.print()
 
 // reduceByKey
 //(SPY-STOCK-TRADED,ArrayBuffer(244.05, 244.05, 244.05, 244.05, 244.05, 244.04, 244.04, 244.04, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.04, 244.04, 244.05, 244.05, 244.05, 244.04, 244.05, 244.05, 244.05, 244.04, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.07, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.04, 244.03, 244.04, 244.04, 244.04, 244.03, 244.03, 244.06, 244.03, 244.05, 244.04, 244.03, 244.04, 244.03, 244.04, 244.03, 244.04, 244.04, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.02, 244.01, 244.01, 244.01, 244.02, 244.03, 244.03, 244.02, 244.02, 244.02, 244.01, 244.01, 244.01, 244.02, 244.02, 244.01, 244.01, 244.02, 244.01, 244.01, 244.02, 244.02, 244.01, 244.02, 244.01, 244.01, 244.06, 244.01, 244.01, 244.02, 244.02, 244.03))
@@ -151,11 +122,41 @@ val kSumDstream = kvDstream.reduceByKey(_+_)  // add up values
 val kSizeDstream = kValuesDstream.map(kv => (kv._1, kv._2.size))  // count values
 // kSizeDstream.print()
 
+
+// CALCULATE THE MEAN: STRUCTURED STREAMING
+// calculate the average
+// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
+// http://spark.apache.org/docs/latest/api/python/pyspark.html?highlight=reducebykey
+// https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
+// https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
+// sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
+
+// SLIDING FUNCTIONS
+val addNewFunc = (x: Double, y:Double) => {
+  x+y
+}
+val subOldFunc = (x: Double, y:Double) => {
+  x-y
+}
+
+// config:
+val batchMultiple = 10
+val windowSize = Seconds(batchIntervalSec*batchMultiple)
+val slideDuration = Seconds(batchIntervalSec)
+
+val kvSumDStream = kvDstream.reduceByKeyAndWindow(  // key not mentioned
+  addNewFunc,       // Adding elements in the new batches entering the window
+  subOldFunc,       // Removing elements from the oldest batches exiting the window
+  windowSize,        // Window duration
+  slideDuration)     // Slide duration
+kvSumDStream.print()
+
+
+// STREAMING CONFIG
 // To make sure data is not deleted by the time we query it interactively
 ssc.remember(Minutes(1))
 
 ssc.checkpoint("/Users/Shared/")
-
 
 ssc.start()
 
