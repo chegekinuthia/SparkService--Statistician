@@ -124,13 +124,13 @@ val isSeriesNamefunc = (kv:(String,Double), name:String) => {
 val recordsDstream = jsonDstream.map(deserializefunc).filter(isPricefunc).filter(isRealtimefunc)
 
 val kvDstream = recordsDstream.map(getKVfunc)
-kvDstream.print()
+//kvDstream.print()
 
 val kIncDstream = recordsDstream.map(getKIncfunc)
-kvDstream.print()
+//kvDstream.print()
 
 val kValueIncDstream = recordsDstream.map(getKValueIncfunc)
-kValueIncDstream.print()
+//kValueIncDstream.print()
 
 
 // CALCULATE THE MEAN: STRUCTURED STREAMING
@@ -150,10 +150,10 @@ val subOldFunc = (x: Double, y:Double) => {
   x-y
 }
 // on (value,count)
-val addNewPairFunc = (x: (Double, Double), y:(Double,Double)) => {
+val addNewPairFunc = (x: (Double,Double), y:(Double,Double)) => {
   (x._1+y._1, x._2+y._2)  // values added, counts added
 }
-val subOldPairFunc = (x: (Double, Double), y:(Double,Double)) => {
+val subOldPairFunc = (x: (Double,Double), y:(Double,Double)) => {
   (x._1-y._1, x._2-y._2)  // values subtracted, counts subtracted
 }
 
@@ -186,7 +186,7 @@ val kSumCountDStream = kValueIncDstream.reduceByKeyAndWindow(  // key not mentio
   subOldPairFunc,       // Removing elements from the oldest batches exiting the window
   windowSize,        // Window duration
   slideDuration)     // Slide duration
-kvCountrDStream.print()
+kSumCountDStream.print()
 
 // JOIN
 // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
