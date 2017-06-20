@@ -14,6 +14,7 @@
 // IMPORT THIRD PARTY
 import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import com.onenow.hedgefund.discrete.DataType
 import com.onenow.hedgefund.event.RecordActivity
 import com.onenow.hedgefund.util.Piping
 
@@ -88,14 +89,23 @@ val jsonDstream = unionDstream.map(byteArray => new String(byteArray))
 // jsonDstream.print()
 
 // DESERIALIZE
-// transform: json -> RecordActivity -> (serieName, value)
-val getKVfunc = (json: String) => {
+// transform: json -> RecordActivity
+val deserializefunc = (json: String) => {
   val record:RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
+  record
+}
+// RecordActivity -> isPrice(RecordActivity)
+val isPricefunc = (record: RecordActivity) => {
+  record.getDatumType.toString.equals(DataType.PRICE.toString)
+}
+// RecordActivity -> (serieName, value)
+val getKVfunc = (record: RecordActivity) => {
   (record.getSerieName, record.getStoredValue.toDouble)
 }
 
-val kvDstream = jsonDstream.map(getKVfunc)
-// val recordDstream = jsonDstream.map(json => Piping.deserialize(json, classOf[RecordActivity]))
+
+val priceRecordsDstream =jsonDstream.map(deserializefunc).filter(isPricefunc)
+val kvDstream = priceRecordsDstream.map(getKVfunc)
 kvDstream.print()
 
 // calculate the average
@@ -129,11 +139,9 @@ val slideDuration = Seconds(batchIntervalSec)
 val kvSumDStream = kvDstream.reduceByKeyAndWindow(  // key not mentioned
   addNewFunc,       // Adding elements in the new batches entering the window
   subOldFunc,       // Removing elements from the oldest batches exiting the window
-  // {(x, y) => x + y}, // Adding elements in the new batches entering the window
-  // {(x, y) => x - y}, // Removing elements from the oldest batches exiting the window
   windowSize,        // Window duration
   slideDuration)     // Slide duration
-kvSumDStream.print()
+// kvSumDStream.print()
 
 // reduceByKey
 //(SPY-STOCK-TRADED,ArrayBuffer(244.05, 244.05, 244.05, 244.05, 244.05, 244.04, 244.04, 244.04, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.04, 244.04, 244.05, 244.05, 244.05, 244.04, 244.05, 244.05, 244.05, 244.04, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.07, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.04, 244.03, 244.04, 244.04, 244.04, 244.03, 244.03, 244.06, 244.03, 244.05, 244.04, 244.03, 244.04, 244.03, 244.04, 244.03, 244.04, 244.04, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.02, 244.01, 244.01, 244.01, 244.02, 244.03, 244.03, 244.02, 244.02, 244.02, 244.01, 244.01, 244.01, 244.02, 244.02, 244.01, 244.01, 244.02, 244.01, 244.01, 244.02, 244.02, 244.01, 244.02, 244.01, 244.01, 244.06, 244.01, 244.01, 244.02, 244.02, 244.03))
