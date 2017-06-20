@@ -17,6 +17,7 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 import com.onenow.hedgefund.discrete.{DataTiming, DataType}
 import com.onenow.hedgefund.event.RecordActivity
 import com.onenow.hedgefund.util.Piping
+import org.apache.spark
 
 // import org.apache.spark.storage.StorageLevel
 // import org.apache.spark.streaming.kinesis.KinesisUtils
@@ -62,7 +63,7 @@ StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop
 // Spark session available as 'spark'
 val sc = SparkContext.getOrCreate()
 val ssc = new StreamingContext(sc, Seconds(batchIntervalSec)) // use in databricks
-
+val spark = SparkSession.builder().getOrCreate()
 
 // OPERATIONS: in every microbatch get the union of shard streams
 // https://spark.apache.org/docs/latest/streaming-kinesis-integration.html
@@ -172,6 +173,13 @@ val meanByKey = kvSumDStream.join(kvCountrDStream).map(joined => {
             }
 )
 meanByKey.print()
+
+// Register a temp table at every batch interval so that it can be queried separately
+// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
+meanByKey.window(windowSize).foreachRDD { rdd =>  // Duration(60000)
+  // spark.sqlContext.createDataFrame(rdd).toDF("adId", "clicks", "impressions", "CTR", "Time").registerTempTable("ctr")
+  rdd.take(1)
+}
 
 
 // CALCULATE THE MEAN: WINDOWED STREAMING
