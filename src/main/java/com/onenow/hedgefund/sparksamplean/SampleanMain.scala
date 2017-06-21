@@ -12,6 +12,8 @@
 // example https://github.com/snowplow/spark-streaming-example-project
 
 // IMPORT THIRD PARTY
+import java.util
+
 import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.onenow.hedgefund.discrete.{DataTiming, DataType}
@@ -116,16 +118,23 @@ val getKIncfunc = (record: RecordActivity) => {
 val getKValueIncfunc = (record: RecordActivity) => {
   (record.getSerieName, (record.getStoredValue.toDouble, 1.0))
 }
-
+// RecordActivity -> (serieName, (value,1,mean,variance,deviation))
+val getValuesfunc = (record: RecordActivity) => {
+  (record.getSerieName, (record.getStoredValue.toDouble, 1.0, 0.0, 0.0, 0.0))
+}
 // (serieName, value) -> isSeriesName(serieName, checkName)
 val isSeriesNamefunc = (kv:(String,Double), name:String) => {
   kv._1.toString.equals(name)
 }
 
 val recordsDstream = jsonDstream.map(deserializefunc).filter(isPricefunc) // .filter(isRealtimefunc)
+//recordsDstream.print()
 
 val kValueIncDstream = recordsDstream.map(getKValueIncfunc)
 //kValueIncDstream.print()
+
+val kValuesDstream = recordsDstream.map(getValuesfunc)
+//kValuesDstream.print()
 
 
 // CALCULATE THE MEAN: STRUCTURED STREAMING
@@ -137,7 +146,7 @@ val kValueIncDstream = recordsDstream.map(getKValueIncfunc)
 // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
 
 // SLIDING FUNCTIONS
-// on a double
+// on a value
 val addNewFunc = (x: Double, y:Double) => {
   x+y
 }
@@ -151,11 +160,55 @@ val addNewPairFunc = (x: (Double,Double), y:(Double,Double)) => {
 val subOldPairFunc = (x: (Double,Double), y:(Double,Double)) => {
   (x._1-y._1, x._2-y._2)  // values subtracted, counts subtracted
 }
+// on several (name, (value, count, mean, variance, deviation))
+val addInsightFunc = (x: (Double,Double,Double,Double,Double), y:(Double,Double,Double,Double,Double)) => {
 
+//  (x._1+y._1, x._2+y._2)  // values added, counts added
+  (0.0,0.0,0.0,0.0,0.0)
+}
+val subInsightFunc = (x: (Double,Double,Double,Double,Double), y:(Double,Double,Double,Double,Double)) => {
+
+  //  (x._1+y._1, x._2+y._2)  // values added, counts added
+  (0.0,0.0,0.0,0.0,0.0)
+}
+
+
+import collection.mutable.HashMap
+val lastMean = new HashMap[String, Double]()
+
+
+// REDUCE
+// config:
+// https://spark.apache.org/docs/latest/streaming-programming-guide.html
+// TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
+val batchMultiple = 10
+val windowLength = Seconds(batchIntervalSec*batchMultiple)
+val slideInterval = Seconds(batchIntervalSec)
+
+
+//kValueIncDstream.reduceByWindow(func, windowLength, slideInterval)
+
+
+val kInsightsDStream = kValuesDstream.reduceByKeyAndWindow(  // key not mentioned
+  addInsightFunc,       // Adding elements in the new batches entering the window
+  subInsightFunc,       // Removing elements from the oldest batches exiting the window
+  windowLength,        // Window duration
+  slideInterval)     // Slide duration
+//kInsightsDStream.print()
+
+
+val kSumCountDStream = kValueIncDstream.reduceByKeyAndWindow(  // key not mentioned
+  addNewPairFunc,       // Adding elements in the new batches entering the window
+  subOldPairFunc,       // Removing elements from the oldest batches exiting the window
+  windowLength,        // Window duration
+  slideInterval)     // Slide duration
+// kSumCountDStream.print()
+
+// PRINT
 val printMean = (x: (String, (Double,Double))) => {
   val mean = x._2._1 / x._2._2
   val pair = (x._1, mean)  // seriename, mean
-  if(!pair._2.equals(Double.PositiveInfinity)) {
+  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
     println(pair)
   } else {
     print(x)
@@ -166,21 +219,9 @@ val printPairRDD = (x: RDD[(String, (Double,Double))]) => {
   x.collect().foreach(printMean)
 }
 
-// config:
-// https://spark.apache.org/docs/latest/streaming-programming-guide.html
-// TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
-val batchMultiple = 10
-val windowSize = Seconds(batchIntervalSec*batchMultiple)
-val slideDuration = Seconds(batchIntervalSec)
-
-val kSumCountDStream = kValueIncDstream.reduceByKeyAndWindow(  // key not mentioned
-  addNewPairFunc,       // Adding elements in the new batches entering the window
-  subOldPairFunc,       // Removing elements from the oldest batches exiting the window
-  windowSize,        // Window duration
-  slideDuration)     // Slide duration
-//kSumCountDStream.print()
-
 kSumCountDStream.foreachRDD(printPairRDD)
+
+
 
 // JOIN
 // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
@@ -197,7 +238,7 @@ kSumCountDStream.foreachRDD(printPairRDD)
 
 // Register a temp table at every batch interval so that it can be queried separately
 // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
-//meanByKey.window(windowSize).foreachRDD { rdd =>  // Duration(60000)
+//meanByKey.window(windowLength).foreachRDD { rdd =>  // Duration(60000)
 //  // spark.sqlContext.createDataFrame(rdd).toDF("adId", "clicks", "impressions", "CTR", "Time").registerTempTable("ctr")
 //  rdd.take(1)
 //}
