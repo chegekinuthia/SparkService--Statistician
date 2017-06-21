@@ -18,6 +18,7 @@ import com.onenow.hedgefund.discrete.{DataTiming, DataType}
 import com.onenow.hedgefund.event.RecordActivity
 import com.onenow.hedgefund.util.Piping
 import org.apache.spark
+import org.apache.spark.rdd.RDD
 
 // import org.apache.spark.storage.StorageLevel
 // import org.apache.spark.streaming.kinesis.KinesisUtils
@@ -123,12 +124,6 @@ val isSeriesNamefunc = (kv:(String,Double), name:String) => {
 
 val recordsDstream = jsonDstream.map(deserializefunc).filter(isPricefunc).filter(isRealtimefunc)
 
-val kvDstream = recordsDstream.map(getKVfunc)
-//kvDstream.print()
-
-val kIncDstream = recordsDstream.map(getKIncfunc)
-//kvDstream.print()
-
 val kValueIncDstream = recordsDstream.map(getKValueIncfunc)
 //kValueIncDstream.print()
 
@@ -157,6 +152,15 @@ val subOldPairFunc = (x: (Double,Double), y:(Double,Double)) => {
   (x._1-y._1, x._2-y._2)  // values subtracted, counts subtracted
 }
 
+val printMean = (x: (String, (Double,Double))) => {
+  val mean = x._2._1 / x._2._2
+  val pair = (x._1, mean)  // seriename, mean
+  println(pair)
+}
+
+val printPairRDD = (x: RDD[(String, (Double,Double))]) => {
+  x.collect().foreach(printMean)
+}
 
 // config:
 // https://spark.apache.org/docs/latest/streaming-programming-guide.html
@@ -165,40 +169,26 @@ val batchMultiple = 10
 val windowSize = Seconds(batchIntervalSec*batchMultiple)
 val slideDuration = Seconds(batchIntervalSec)
 
-// When called on a DStream of (K, V) pairs, returns a new DStream of (K, V) pairs
-// where the values for each key are aggregated using the given reduce function func over batches in a sliding window.
-val kvSumDStream = kvDstream.reduceByKeyAndWindow(  // key not mentioned
-  addNewFunc,       // Adding elements in the new batches entering the window
-  subOldFunc,       // Removing elements from the oldest batches exiting the window
-  windowSize,        // Window duration
-  slideDuration)     // Slide duration
-//kvSumDStream.print()
-
-val kvCountrDStream = kIncDstream.reduceByKeyAndWindow(  // key not mentioned
-  addNewFunc,       // Adding elements in the new batches entering the window
-  subOldFunc,       // Removing elements from the oldest batches exiting the window
-  windowSize,        // Window duration
-  slideDuration)     // Slide duration
-//kvCountrDStream.print()
-
 val kSumCountDStream = kValueIncDstream.reduceByKeyAndWindow(  // key not mentioned
   addNewPairFunc,       // Adding elements in the new batches entering the window
   subOldPairFunc,       // Removing elements from the oldest batches exiting the window
   windowSize,        // Window duration
   slideDuration)     // Slide duration
-kSumCountDStream.print()
+//kSumCountDStream.print()
+
+kSumCountDStream.foreachRDD(printPairRDD)
 
 // JOIN
 // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
 // When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W))
 // TODO: join(otherDataset, [numTasks])
-val meanByKey = kvSumDStream.join(kvCountrDStream).map(joined => {
-              val sum = joined._2._1
-              val count = joined._2._2
-              val mean = sum/count
-              (joined._1, mean, sum, count)  // serieName, mean...
-            }
-)
+//val meanByKey = kvSumDStream.join(kvCountrDStream).map(joined => {
+//              val sum = joined._2._1
+//              val count = joined._2._2
+//              val mean = sum/count
+//              (joined._1, mean, sum, count)  // serieName, mean...
+//            }
+//)
 //meanByKey.print()
 
 // Register a temp table at every batch interval so that it can be queried separately
