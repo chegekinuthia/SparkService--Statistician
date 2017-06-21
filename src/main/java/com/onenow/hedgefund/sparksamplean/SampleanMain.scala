@@ -122,7 +122,7 @@ val isSeriesNamefunc = (kv:(String,Double), name:String) => {
   kv._1.toString.equals(name)
 }
 
-val recordsDstream = jsonDstream.map(deserializefunc).filter(isPricefunc).filter(isRealtimefunc)
+val recordsDstream = jsonDstream.map(deserializefunc).filter(isPricefunc) // .filter(isRealtimefunc)
 
 val kValueIncDstream = recordsDstream.map(getKValueIncfunc)
 //kValueIncDstream.print()
@@ -155,7 +155,11 @@ val subOldPairFunc = (x: (Double,Double), y:(Double,Double)) => {
 val printMean = (x: (String, (Double,Double))) => {
   val mean = x._2._1 / x._2._2
   val pair = (x._1, mean)  // seriename, mean
-  println(pair)
+  if(!pair._2.equals(Double.PositiveInfinity)) {
+    println(pair)
+  } else {
+    print(x)
+  }
 }
 
 val printPairRDD = (x: RDD[(String, (Double,Double))]) => {
