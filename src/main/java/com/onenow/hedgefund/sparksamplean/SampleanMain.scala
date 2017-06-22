@@ -112,41 +112,52 @@ val getKValueIncfunc = (record: RecordActivity) => {
 }
 // RecordActivity -> (serieName, (value,1,mean,variance,deviation))
 val getRecordValuesfunc = (record: RecordActivity) => {
-  (record.getSerieName, (record.getStoredValue.toDouble, 1.0, 0.0, 0.0, 0.0, 0.0))
+  val value = record.getStoredValue.toDouble  //1
+  val sum = value               //2
+  val count = 1.0               //3
+  val mean = value/count        //4
+  val variance = 0.0            //5
+  val deviation = 0.0           //6
+  val zScore = 0.0              //7
+  (record.getSerieName, (value, sum, count, mean, variance, deviation, zScore))
 }
 // SLIDING
 // on a value
-val addNewFunc = (x: Double, y:Double) => {
-  x+y
+val addNewFunc = (accumulator: Double, current:Double) => {
+  accumulator+current
 }
-val subOldFunc = (x: Double, y:Double) => {
-  x-y
+val subOldFunc = (accumulator: Double, current:Double) => {
+  accumulator-current
 }
 // on (value,count)
-val addNewPairFunc = (x: (Double,Double), y:(Double,Double)) => {
-  (x._1+y._1, x._2+y._2)  // values added, counts added
+val addNewPairFunc = (accumulator: (Double,Double), current:(Double,Double)) => {
+  (accumulator._1+current._1, accumulator._2+current._2)  // values added, counts added
 }
-val subOldPairFunc = (x: (Double,Double), y:(Double,Double)) => {
-  (x._1-y._1, x._2-y._2)  // values subtracted, counts subtracted
+val subOldPairFunc = (accumulator: (Double,Double), current:(Double,Double)) => {
+  (accumulator._1-current._1, accumulator._2-current._2)  // values subtracted, counts subtracted
 }
 // on several (name, (value, count, mean, variance, deviation))
-val addInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double), current:(Double,Double,Double,Double,Double,Double)) => {
-  val valueTotal = accumulator._1 + current._1
-  val countTotal = accumulator._2 + current._2
+val addInsightFunc = (accumulator:(Double,Double,Double,Double,Double,Double,Double),
+                      current:(Double,Double,Double,Double,Double,Double,Double)) => {
+  val value = current._1
+  val valueTotal = accumulator._2 + current._2
+  val countTotal = accumulator._3 + current._3
   val meanTodate = valueTotal/countTotal
-  val currentScore = current._1 - meanTodate
-  val varianceTotal = accumulator._4 + currentScore * currentScore  // sum of square scores
+  val currentScore = value - meanTodate
+  val varianceTotal = accumulator._5 + currentScore * currentScore  // sum of square scores
   val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-  (valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+  (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
 }
-val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double), current:(Double,Double,Double,Double,Double,Double)) => {
-  val valueTotal = accumulator._1 - current._1
-  val countTotal = accumulator._2 - current._2
+val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double,Double),
+                      current:(Double,Double,Double,Double,Double,Double,Double)) => {
+  val value = current._1
+  val valueTotal = accumulator._2 - current._2
+  val countTotal = accumulator._3 - current._3
   val meanTodate = valueTotal/countTotal
-  val currentScore = current._1 - meanTodate
-  val varianceTotal = accumulator._4 - currentScore * currentScore  // sum of square scores
+  val currentScore = value - meanTodate
+  val varianceTotal = accumulator._5 - currentScore * currentScore  // sum of square scores
   val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-  (valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+  (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
 }
 
 // == D-STREAM ==
@@ -208,7 +219,7 @@ val kInsightsByLookbackDStream = kValuesDstreamByLookbackList.map(kValuesDstream
 
 
 // PRINT
-val printMean = (x: (String, (Double,Double,Double,Double,Double,Double))) => {
+val printMean = (x: (String, (Double,Double,Double,Double,Double,Double,Double))) => {
   //  val mean = x._2._1 / x._2._2
   //  val pair = (x._1, mean)  // seriename, mean
   //  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
@@ -219,7 +230,7 @@ val printMean = (x: (String, (Double,Double,Double,Double,Double,Double))) => {
   println(x)
 }
 
-val printPairRDD = (x: RDD[(String, (Double,Double,Double,Double,Double,Double))]) => {
+val printPairRDD = (x: RDD[(String, (Double,Double,Double,Double,Double,Double,Double))]) => {
   x.collect().foreach(printMean)
 }
 
