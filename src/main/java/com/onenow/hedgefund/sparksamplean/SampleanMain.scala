@@ -47,9 +47,10 @@ val deployEnv = DeployEnv.STAGING;
 val region = "us-east-1" // Kinesis.defaultRegion
 val endPoint = "https://kinesis.us-east-1.amazonaws.com"
 val streamName = ServiceType.REPLAY.toString + "-" + deployEnv.toString
-val initialPosition = InitialPositionInStream.TRIM_HORIZON // LATEST, TRIM_HORIZON, AT_TIMESTAMP
 
 // TIMING
+// streams:
+val initialPosition = InitialPositionInStream.TRIM_HORIZON // LATEST, TRIM_HORIZON, AT_TIMESTAMP
 // context:
 val contextBatchSec = 5
 val contextBatchDuration = Seconds(contextBatchSec)
@@ -185,9 +186,6 @@ val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double), 
   (valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
 }
 
-import collection.mutable.HashMap
-val lastMean = new HashMap[String, Double]()
-
 
 // REDUCE
 // config:
@@ -240,30 +238,6 @@ kInsightsDStream.foreachRDD(printPairRDD)
 //  rdd.take(1)
 //}
 
-
-// CALCULATE THE MEAN: WINDOWED STREAMING
-//val kValuesWindowDstream10 = kvDstream.window(Seconds(contextBatchSec*10))
-
-//val getMeanFunc = (kv:(String,Int)) => {
-//
-//}
-
-// reduceByKey
-//(SPY-STOCK-TRADED,ArrayBuffer(244.05, 244.05, 244.05, 244.05, 244.05, 244.04, 244.04, 244.04, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.04, 244.04, 244.05, 244.05, 244.05, 244.04, 244.05, 244.05, 244.05, 244.04, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.07, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.05, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.06, 244.05, 244.05, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.04, 244.03, 244.04, 244.04, 244.04, 244.03, 244.03, 244.06, 244.03, 244.05, 244.04, 244.03, 244.04, 244.03, 244.04, 244.03, 244.04, 244.04, 244.04, 244.04, 244.03, 244.03, 244.03, 244.03, 244.03, 244.04, 244.02, 244.01, 244.01, 244.01, 244.02, 244.03, 244.03, 244.02, 244.02, 244.02, 244.01, 244.01, 244.01, 244.02, 244.02, 244.01, 244.01, 244.02, 244.01, 244.01, 244.02, 244.02, 244.01, 244.02, 244.01, 244.01, 244.06, 244.01, 244.01, 244.02, 244.02, 244.03))
-//val kValuesDstream = kValuesWindowDstream10.groupByKey()
-
-//val kSumDstream = kvDstream.reduceByKey(_+_)  // add up values
-// kSumDstream.print()
-
-//val kSizeDstream = kValuesDstream.map(kv => (kv._1, kv._2.size))  // count values
-// kSizeDstream.print()
-
-
-
-// OUTPUT
-// joins https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
-//val una = kvSumDStream.filter(r => isSeriesNamefunc(r, "SPY-STOCK-TRADED"))
-//una.foreachRDD()
 
 // WATERMARKING
 // https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html
