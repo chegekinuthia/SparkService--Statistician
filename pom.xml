@@ -71,28 +71,26 @@
   <!-- DEPENDENCIES TO PULL -->
   <dependencies>
 
-    <!-- OWN: UTIL -->
+    <dependency>
+      <groupId>${this.groupId}</groupId>
+      <artifactId>lookback</artifactId>
+      <version>LATEST</version>
+    </dependency>
     <dependency>
       <groupId>${this.groupId}</groupId>
       <artifactId>util</artifactId>
       <version>LATEST</version>
     </dependency>
-
-    <!-- OWN: LOGGING -->
     <dependency>
       <groupId>${this.groupId}</groupId>
       <artifactId>logging</artifactId>
       <version>LATEST</version>
     </dependency>
-
-    <!-- OWN: EVENT -->
     <dependency>
       <groupId>${this.groupId}</groupId>
       <artifactId>event</artifactId>
       <version>LATEST</version>
     </dependency>
-
-    <!-- OWN: DISCRETE -->
     <dependency>
       <groupId>${this.groupId}</groupId>
       <artifactId>discrete</artifactId>

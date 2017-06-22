@@ -18,6 +18,7 @@ import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.onenow.hedgefund.discrete.{DataTiming, DataType, DeployEnv, ServiceType}
 import com.onenow.hedgefund.event.RecordActivity
+import com.onenow.hedgefund.lookback.LookbackFactory
 import com.onenow.hedgefund.util.Piping
 import org.apache.spark
 import org.apache.spark.rdd.RDD
@@ -38,7 +39,7 @@ import java.nio.ByteBuffer
 import scala.util.Random
 
 
-// INSTANTIATE KINESIS
+// == INSTANTIATE KINESIS ==
 // https://docs.databricks.com/spark/latest/structured-streaming/kinesis.html
 val numShards = 1
 val serviceType = ServiceType.STATISTICIAN
@@ -48,7 +49,7 @@ val region = "us-east-1" // Kinesis.defaultRegion
 val endPoint = "https://kinesis.us-east-1.amazonaws.com"
 val streamName = ServiceType.REPLAY.toString + "-" + deployEnv.toString
 
-// TIMING
+// == TIMING ==
 // streams:
 val initialPosition = InitialPositionInStream.TRIM_HORIZON // LATEST, TRIM_HORIZON, AT_TIMESTAMP
 // context:
@@ -66,7 +67,7 @@ val checkpointFolder = "/Users/Shared/"
 val streamingContextTimeout = 60L *1000
 
 
-// CONFIGURE THE STREAMING CONTEXT
+// == CONFIGURE THE STREAMING CONTEXT ==
 // when using spark-submit:
 // Spark context available as 'sc' (master = local[4], app id = local-1497911109319).
 // Spark session available as 'spark'
@@ -75,7 +76,80 @@ val sc = SparkContext.getOrCreate()
 val ssc = new StreamingContext(sc, contextBatchDuration) // use in databricks
 val spark = SparkSession.builder().getOrCreate()
 
-// D-STREAM:
+
+// == FUNCTIONS ==
+// DESERIALIZE
+// json -> RecordActivity
+val deserializefunc = (json: String) => {
+  val record:RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
+  record
+}
+// BOOLEAN
+// RecordActivity -> isDataType(RecordActivity)
+val isPricefunc = (record: RecordActivity) => {
+  record.getDatumType.toString.equals(DataType.PRICE.toString)
+}
+// RecordActivity -> isTiming(RecordActivity)
+val isRealtimefunc = (record: RecordActivity) => {
+  record.getDatumTiming.toString.equals(DataTiming.REALTIME.toString)
+}
+// (serieName, value) -> isSeriesName(serieName, checkName)
+val isSeriesNamefunc = (kv:(String,Double), name:String) => {
+  kv._1.toString.equals(name)
+}
+// UNBUNDLE
+// RecordActivity -> (serieName, value)
+val getKVfunc = (record: RecordActivity) => {
+  (record.getSerieName, record.getStoredValue.toDouble)
+}
+// RecordActivity -> (serieName, 1)
+val getKIncfunc = (record: RecordActivity) => {
+  (record.getSerieName, 1.0)
+}
+// RecordActivity -> (serieName, (value,1))
+val getKValueIncfunc = (record: RecordActivity) => {
+  (record.getSerieName, (record.getStoredValue.toDouble, 1.0))
+}
+// RecordActivity -> (serieName, (value,1,mean,variance,deviation))
+val getRecordValuesfunc = (record: RecordActivity) => {
+  (record.getSerieName, (record.getStoredValue.toDouble, 1.0, 0.0, 0.0, 0.0, 0.0))
+}
+// SLIDING
+// on a value
+val addNewFunc = (x: Double, y:Double) => {
+  x+y
+}
+val subOldFunc = (x: Double, y:Double) => {
+  x-y
+}
+// on (value,count)
+val addNewPairFunc = (x: (Double,Double), y:(Double,Double)) => {
+  (x._1+y._1, x._2+y._2)  // values added, counts added
+}
+val subOldPairFunc = (x: (Double,Double), y:(Double,Double)) => {
+  (x._1-y._1, x._2-y._2)  // values subtracted, counts subtracted
+}
+// on several (name, (value, count, mean, variance, deviation))
+val addInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double), current:(Double,Double,Double,Double,Double,Double)) => {
+  val valueTotal = accumulator._1 + current._1
+  val countTotal = accumulator._2 + current._2
+  val meanTodate = valueTotal/countTotal
+  val currentScore = current._1 - meanTodate
+  val varianceTotal = accumulator._4 + currentScore * currentScore  // sum of square scores
+  val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
+  (valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+}
+val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double), current:(Double,Double,Double,Double,Double,Double)) => {
+  val valueTotal = accumulator._1 - current._1
+  val countTotal = accumulator._2 - current._2
+  val meanTodate = valueTotal/countTotal
+  val currentScore = current._1 - meanTodate
+  val varianceTotal = accumulator._4 - currentScore * currentScore  // sum of square scores
+  val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
+  (valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+}
+
+// == D-STREAM ==
 // In every microbatch get the union of shard streams
 // Credentials in the environment, ur use a constructor of KinesisUtils.createStream that take AWS_ACCESS_KEY_ID, AWS_SECRET_KEY
 // https://spark.apache.org/docs/latest/streaming-kinesis-integration.html
@@ -94,49 +168,20 @@ val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 val jsonDstream = unionDstream.map(byteArray => new String(byteArray))
 // jsonDstream.print()
 
-// DESERIALIZE AND FILTER
-// transform: json -> RecordActivity
-val deserializefunc = (json: String) => {
-  val record:RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
-  record
-}
-// RecordActivity -> isDataType(RecordActivity)
-val isPricefunc = (record: RecordActivity) => {
-  record.getDatumType.toString.equals(DataType.PRICE.toString)
-}
-// RecordActivity -> isTiming(RecordActivity)
-val isRealtimefunc = (record: RecordActivity) => {
-  record.getDatumTiming.toString.equals(DataTiming.REALTIME.toString)
-}
-// RecordActivity -> (serieName, value)
-val getKVfunc = (record: RecordActivity) => {
-  (record.getSerieName, record.getStoredValue.toDouble)
-}
-// RecordActivity -> (serieName, 1)
-val getKIncfunc = (record: RecordActivity) => {
-  (record.getSerieName, 1.0)
-}
-// RecordActivity -> (serieName, (value,1))
-val getKValueIncfunc = (record: RecordActivity) => {
-  (record.getSerieName, (record.getStoredValue.toDouble, 1.0))
-}
-// RecordActivity -> (serieName, (value,1,mean,variance,deviation))
-val getValuesfunc = (record: RecordActivity) => {
-  (record.getSerieName, (record.getStoredValue.toDouble, 1.0, 0.0, 0.0, 0.0, 0.0))
-}
-// (serieName, value) -> isSeriesName(serieName, checkName)
-val isSeriesNamefunc = (kv:(String,Double), name:String) => {
-  kv._1.toString.equals(name)
-}
-
 val recordsDstream = jsonDstream.map(deserializefunc).filter(isPricefunc) // .filter(isRealtimefunc)
 //recordsDstream.print()
 
-val kValueIncDstream = recordsDstream.map(getKValueIncfunc)
-//kValueIncDstream.print()
+import scala.collection.JavaConversions._
+val factory = new LookbackFactory()
+val tradingLookbacks = factory.getAll
 
-val kValuesDstream = recordsDstream.map(getValuesfunc)
-//kValuesDstream.print()
+val recordsByLookbackDstreamList = tradingLookbacks.map { lookback =>  // each list only has relevant records
+  recordsDstream.filter(r => r.getSerieName.contains(lookback.getWindowSec.toString))
+}
+
+// for each stream (pair records for specific windows)
+// turn a RecordActivity into a tuple of statistical values
+val kValuesDstreamByLookbackList = recordsByLookbackDstreamList.map(recordDstream => recordDstream.map(getRecordValuesfunc))
 
 
 // CALCULATE THE MEAN: STRUCTURED STREAMING
@@ -147,57 +192,20 @@ val kValuesDstream = recordsDstream.map(getValuesfunc)
 // https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
 // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
 
-// SLIDING FUNCTIONS
-// on a value
-val addNewFunc = (x: Double, y:Double) => {
-  x+y
-}
-val subOldFunc = (x: Double, y:Double) => {
-  x-y
-}
-// on (value,count)
-val addNewPairFunc = (x: (Double,Double), y:(Double,Double)) => {
-  (x._1+y._1, x._2+y._2)  // values added, counts added
-}
-val subOldPairFunc = (x: (Double,Double), y:(Double,Double)) => {
-  (x._1-y._1, x._2-y._2)  // values subtracted, counts subtracted
-}
-// on several (name, (value, count, mean, variance, deviation))
-val addInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double), current:(Double,Double,Double,Double,Double,Double)) => {
-
-  val valueTotal = accumulator._1 + current._1
-  val countTotal = accumulator._2 + current._2
-  val meanTodate = valueTotal/countTotal
-  val currentScore = current._1 - meanTodate
-  val varianceTotal = accumulator._4 + currentScore * currentScore  // sum of square scores
-  val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-
-  (valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
-}
-val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double), current:(Double,Double,Double,Double,Double,Double)) => {
-
-  val valueTotal = accumulator._1 - current._1
-  val countTotal = accumulator._2 - current._2
-  val meanTodate = valueTotal/countTotal
-  val currentScore = current._1 - meanTodate
-  val varianceTotal = accumulator._4 - currentScore * currentScore  // sum of square scores
-  val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-
-  (valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
-}
-
-
 // REDUCE
 // config:
 // https://spark.apache.org/docs/latest/streaming-programming-guide.html
 // TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
 
-val kInsightsDStream = kValuesDstream.reduceByKeyAndWindow(  // key not mentioned
+val kInsightsByLookbackDStream = kValuesDstreamByLookbackList.map(kValuesDstream =>
+  kValuesDstream.reduceByKeyAndWindow(  // key not mentioned
   addInsightFunc,       // Adding elements in the new batches entering the window
   subInsightFunc,       // Removing elements from the oldest batches exiting the window
   windowLength,        // Window duration
   slideInterval)     // Slide duration
-//kInsightsDStream.print()
+)
+//kInsightsByLookbackDStream.print()
+
 
 // PRINT
 val printMean = (x: (String, (Double,Double,Double,Double,Double,Double))) => {
@@ -215,7 +223,8 @@ val printPairRDD = (x: RDD[(String, (Double,Double,Double,Double,Double,Double))
   x.collect().foreach(printMean)
 }
 
-kInsightsDStream.foreachRDD(printPairRDD)
+kInsightsByLookbackDStream.map(kInsightsDStream => kInsightsDStream.foreachRDD(printPairRDD))
+//kInsightsDStream.foreachRDD(printPairRDD)
 
 
 // JOIN
