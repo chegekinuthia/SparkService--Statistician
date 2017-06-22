@@ -159,6 +159,34 @@ val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double,Do
   val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
   (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
 }
+// STRUCTURED STREAMING
+// https://spark.apache.org/docs/latest/streaming-programming-guide.html
+// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
+// http://spark.apache.org/docs/latest/api/python/pyspark.html?highlight=reducebykey
+// https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
+// https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
+// sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
+val reduceDstreamByKeyAndWindow = (dStream: DStream[(String, (Double,Double,Double,Double,Double,Double,Double))]) => {
+  dStream.reduceByKeyAndWindow(// key not mentioned
+    addInsightFunc, // Adding elements in the new batches entering the window
+    subInsightFunc, // Removing elements from the oldest batches exiting the window
+    windowLength, // Window duration
+    slideInterval) // Slide duration
+}
+// PRINT
+val printMean = (x: (String, (Double,Double,Double,Double,Double,Double,Double))) => {
+  //  val mean = x._2._1 / x._2._2
+  //  val pair = (x._1, mean)  // seriename, mean
+  //  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
+  //    println(pair)
+  //  } else {
+  //    print(x)
+  //  }
+  println(x)
+}
+val printPairRDD = (x: RDD[(String, (Double,Double,Double,Double,Double,Double,Double))]) => {
+  x.collect().foreach(printMean)
+}
 
 // == D-STREAM ==
 // In every microbatch get the union of shard streams
@@ -176,63 +204,28 @@ val kinesisDstreams = (0 until numShards).map { i =>
 val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 // unionDstream.print()
 
-val jsonDstream = unionDstream.map(byteArray => new String(byteArray))
-// jsonDstream.print()
-
-val recordsDstream = jsonDstream.map(deserializefunc).filter(isPricefunc) // .filter(isRealtimefunc)
-//recordsDstream.print()
+val recordDstream = (unionDstream
+  .map(byteArray => new String(byteArray))  // string from byte array
+  .map(deserializefunc).filter(isPricefunc) // price record
+  )
+// recordDstream.print()
 
 import scala.collection.JavaConversions._
 val factory = new LookbackFactory()
 val tradingLookbacks = factory.getAll
 
-val recordsByLookbackDstreamList = tradingLookbacks.map { lookback =>  // each list only has relevant records
-  recordsDstream.filter(r => r.getSerieName.contains(lookback.getWindowSec.toString))
-}
-
-// for each stream (pair records for specific windows)
-// turn a RecordActivity into a tuple of statistical values
-val kValuesDstreamByLookbackList = recordsByLookbackDstreamList.map(recordDstream => recordDstream.map(getRecordValuesfunc))
+val recordValuesByLookbackDstreamList = (tradingLookbacks
+  .map { lookback => recordDstream.filter(r => r.getSerieName.contains(lookback.getWindowSec.toString))} // each list only has relevant records
+  .map(recordDstream => recordDstream.map(getRecordValuesfunc)) // for each stream (pair records for specific windows) turn a RecordActivity into a tuple of statistical values
+  )
+// recordValuesByLookbackDstreamList.print()
 
 
-// CALCULATE THE MEAN: STRUCTURED STREAMING
-// calculate the average
-// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
-// http://spark.apache.org/docs/latest/api/python/pyspark.html?highlight=reducebykey
-// https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
-// https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
-// sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
-
-// REDUCE
-// config:
-// https://spark.apache.org/docs/latest/streaming-programming-guide.html
 // TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
-
-val kInsightsByLookbackDStream = kValuesDstreamByLookbackList.map(kValuesDstream =>
-  kValuesDstream.reduceByKeyAndWindow(  // key not mentioned
-  addInsightFunc,       // Adding elements in the new batches entering the window
-  subInsightFunc,       // Removing elements from the oldest batches exiting the window
-  windowLength,        // Window duration
-  slideInterval)     // Slide duration
-)
+val kInsightsByLookbackDStream = (recordValuesByLookbackDstreamList
+  .map(reduceDstreamByKeyAndWindow)
+  )
 //kInsightsByLookbackDStream.print()
-
-
-// PRINT
-val printMean = (x: (String, (Double,Double,Double,Double,Double,Double,Double))) => {
-  //  val mean = x._2._1 / x._2._2
-  //  val pair = (x._1, mean)  // seriename, mean
-  //  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
-  //    println(pair)
-  //  } else {
-  //    print(x)
-  //  }
-  println(x)
-}
-
-val printPairRDD = (x: RDD[(String, (Double,Double,Double,Double,Double,Double,Double))]) => {
-  x.collect().foreach(printMean)
-}
 
 kInsightsByLookbackDStream.map(kInsightsDStream => kInsightsDStream.foreachRDD(printPairRDD))
 //kInsightsDStream.foreachRDD(printPairRDD)
@@ -276,4 +269,3 @@ ssc.awaitTerminationOrTimeout(streamingContextTimeout) // time to wait in millis
 
 // FORCE STOP
 // StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }
-
