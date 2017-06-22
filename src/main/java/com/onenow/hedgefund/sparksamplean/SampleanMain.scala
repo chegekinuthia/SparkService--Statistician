@@ -50,13 +50,19 @@ val streamName = ServiceType.REPLAY.toString + "-" + deployEnv.toString
 val initialPosition = InitialPositionInStream.TRIM_HORIZON // LATEST, TRIM_HORIZON, AT_TIMESTAMP
 
 // TIMING
-// context
+// context:
 val contextBatchSec = 5
 val contextBatchDuration = Seconds(contextBatchSec)
-// windowing
+// windowing:
 val batchMultiple = 10
 val windowLength = Seconds(contextBatchSec*batchMultiple)
 val slideInterval = Seconds(contextBatchSec)
+// checkpoint:
+val streamCheckpointInterval = Milliseconds(contextBatchSec*1000)
+val contextRemember = Minutes(1)
+val checkpointFolder = "/Users/Shared/"
+// timeout:
+val streamingContextTimeout = 60L *1000
 
 
 // CONFIGURE THE STREAMING CONTEXT
@@ -78,7 +84,7 @@ val spark = SparkSession.builder().getOrCreate()
 // Create the Kinesis DStreams:
 val kinesisDstreams = (0 until numShards).map { i =>
   KinesisUtils.createStream(ssc, appName.toString, streamName, endPoint,
-    region.toString, initialPosition, Milliseconds(contextBatchSec*1000), StorageLevel.MEMORY_AND_DISK_2)
+    region.toString, initialPosition, streamCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2)
 }
 
 val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
@@ -264,14 +270,14 @@ kInsightsDStream.foreachRDD(printPairRDD)
 
 // STREAMING CONFIG
 // To make sure data is not deleted by the time we query it interactively
-ssc.remember(Minutes(1))
+ssc.remember(contextRemember)
 
-ssc.checkpoint("/Users/Shared/")
+ssc.checkpoint(checkpointFolder)
 
 ssc.start()
 
 // This is to ensure that we wait for some time before the background streaming job starts. This will put this cell on hold for 5 times the batchIntervalSeconds.
-ssc.awaitTerminationOrTimeout(60L *1000) // time to wait in milliseconds; and/or run stopSparkContext above
+ssc.awaitTerminationOrTimeout(streamingContextTimeout) // time to wait in milliseconds; and/or run stopSparkContext above
 // ssc.awaitTermination()
 
 // FORCE STOP
