@@ -4,9 +4,11 @@
 
 #### On Spark shell
 
-bash resources/gatherJars.sh 
+cd resources
 
-bash resources/startSpark.sh 
+bash gatherJars.sh 
+
+bash startSpark.sh 
 
 :load job.scala 
 
