@@ -10,7 +10,7 @@ bash gatherJars.sh
 
 bash startSpark.sh 
 
-:load job.scala 
+:load StatisticianMain.scala 
 
 #### Submitting to a Spark cluster
 

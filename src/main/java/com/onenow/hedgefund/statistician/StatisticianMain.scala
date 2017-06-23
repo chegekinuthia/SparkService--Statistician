@@ -1,5 +1,5 @@
 // spark-shell --master local[4] --packages "org.apache.spark:spark-streaming-kinesis-asl_2.11:2.1.1"
-// :load /Users/pablo/git/SparkService--Samplean/src/main/java/com/onenow/hedgefund/sparksamplean/StatisticianMain.scala
+// :load <thisFileName>
 //
 // dependency: spark-2.1.1-bin-hadoop2.7
 //
@@ -18,11 +18,13 @@ import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.onenow.hedgefund.discrete.{DataTiming, DataType, DeployEnv, ServiceType}
 import com.onenow.hedgefund.event.RecordActivity
-import com.onenow.hedgefund.lookback.LookbackFactory
+import com.onenow.hedgefund.lookback.{LookbackFactory, TradingLookback}
 import com.onenow.hedgefund.util.Piping
 import org.apache.spark
 import org.apache.spark.rdd.RDD
 import org.joda.time.Seconds
+
+import scala.collection.TraversableOnce
 
 // import org.apache.spark.storage.StorageLevel
 // import org.apache.spark.streaming.kinesis.KinesisUtils
@@ -38,6 +40,12 @@ import org.apache.spark.streaming.dstream._
 
 import java.nio.ByteBuffer
 import scala.util.Random
+
+
+// == WINDOW LOOKBACKS ==
+import scala.collection.JavaConversions._
+val factory = new LookbackFactory()
+val tradingLookbacks = factory.getAll
 
 
 // == INSTANTIATE KINESIS ==
@@ -73,97 +81,100 @@ val streamingContextTimeout = 60L *1000
 // Spark context available as 'sc' (master = local[4], app id = local-1497911109319).
 // Spark session available as 'spark'
 StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop the streaming contexts without stopping the spark context
-val sc = SparkContext.getOrCreate()
-val ssc = new StreamingContext(sc, contextBatchDuration) // use in databricks
-val spark = SparkSession.builder().getOrCreate()
+@transient val sc = SparkContext.getOrCreate()
+@transient val ssc = new StreamingContext(sc, contextBatchDuration) // use in databricks
+@transient val spark = SparkSession.builder().getOrCreate()
 
 
 // == FUNCTIONS ==
+// serializable functions inside objects https://www.nicolaferraro.me/2016/02/22/using-non-serializable-objects-in-apache-spark/
+// don't keep sc, ssc, spark in object https://stackoverflow.com/questions/27579474/serialization-exception-on-spark
 // DESERIALIZE
 // byteArray -> String(byteArray)
-val getStringFromByteArray = (entry:Array[Byte]) => {
-  new String(entry)
-}
-// json -> RecordActivity
-val getDeserializedRecordActivity = (json: String) => {
-  val record:RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
-  record
-}
-// BOOLEAN
-// RecordActivity -> isPriceDataType(RecordActivity)
-val isPriceDataType = (record:RecordActivity) => {
-  record.getDatumType.toString.equals(DataType.PRICE.toString)
-}
-// RecordActivity -> isTiming(RecordActivity)
-val isRealtimeDataTiming = (record:RecordActivity) => {
-  record.getDatumTiming.toString.equals(DataTiming.REALTIME.toString)
-}
-// (serieName, value) -> isSeriesName(serieName, checkName)
-val isSeriesNamefunc = (kv:(String,Double), name:String) => {
-  kv._1.toString.equals(name)
-}
-// UNBUNDLE
-// RecordActivity -> (serieName, value)
-val getKVfunc = (record: RecordActivity) => {
-  (record.getSerieName, record.getStoredValue.toDouble)
-}
-// RecordActivity -> (serieName, 1)
-val getKIncfunc = (record: RecordActivity) => {
-  (record.getSerieName, 1.0)
-}
-// RecordActivity -> (serieName, (value,1))
-val getKValueIncfunc = (record: RecordActivity) => {
-  (record.getSerieName, (record.getStoredValue.toDouble, 1.0))
-}
-// RecordActivity -> (serieName, (value,1,mean,variance,deviation))
-val getRecordValuesfunc = (record: RecordActivity) => {
-  val value = record.getStoredValue.toDouble  //1
-  val sum = value               //2
-  val count = 1.0               //3
-  val mean = value/count        //4
-  val variance = 0.0            //5
-  val deviation = 0.0           //6
-  val zScore = 0.0              //7
-  (record.getSerieName, (value, sum, count, mean, variance, deviation, zScore))
-}
-// SLIDING
-// on a value
-val addNewFunc = (accumulator: Double, current:Double) => {
-  accumulator+current
-}
-val subOldFunc = (accumulator: Double, current:Double) => {
-  accumulator-current
-}
-// on (value,count)
-val addNewPairFunc = (accumulator: (Double,Double), current:(Double,Double)) => {
-  (accumulator._1+current._1, accumulator._2+current._2)  // values added, counts added
-}
-val subOldPairFunc = (accumulator: (Double,Double), current:(Double,Double)) => {
-  (accumulator._1-current._1, accumulator._2-current._2)  // values subtracted, counts subtracted
-}
-// on several (name, (value, count, mean, variance, deviation))
-val addInsightFunc = (accumulator:(Double,Double,Double,Double,Double,Double,Double),
-                      current:(Double,Double,Double,Double,Double,Double,Double)) => {
-  val value = current._1
-  val valueTotal = accumulator._2 + current._2
-  val countTotal = accumulator._3 + current._3
-  val meanTodate = valueTotal/countTotal
-  val currentScore = value - meanTodate
-  val varianceTotal = accumulator._5 + currentScore * currentScore  // sum of square scores
-  val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-  (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
-}
-val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double,Double),
-                      current:(Double,Double,Double,Double,Double,Double,Double)) => {
-  val value = current._1
-  val valueTotal = accumulator._2 - current._2
-  val countTotal = accumulator._3 - current._3
-  val meanTodate = valueTotal/countTotal
-  val currentScore = value - meanTodate
-  val varianceTotal = accumulator._5 - currentScore * currentScore  // sum of square scores
-  val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-  (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
-}
+case object StatFunctions extends Serializable {
+  val getStringFromByteArray = (entry: Array[Byte]) => {
+    new String(entry)
+  }
+  // json -> RecordActivity
+  val getDeserializedRecordActivity = (json: String) => {
+    val record: RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
+    record
+  }
+  // BOOLEAN
+  // RecordActivity -> isPriceDataType(RecordActivity)
+  val isPriceDataType = (record:RecordActivity, dataType:DataType) => {
+    record.getDatumType.toString.equals(dataType.toString)
+  }
+  // RecordActivity -> isTiming(RecordActivity)
+  val isRealtimeDataTiming = (record: RecordActivity) => {
+    record.getDatumTiming.toString.equals(DataTiming.REALTIME.toString)
+  }
+  // (serieName, value) -> isSeriesName(serieName, checkName)
+  val isSeriesNamefunc = (kv: (String, Double), name: String) => {
+    kv._1.toString.equals(name)
+  }
+  // UNBUNDLE
+  // RecordActivity -> (serieName, value)
+  val getKVfunc = (record: RecordActivity) => {
+    (record.getSerieName, record.getStoredValue.toDouble)
+  }
+  // RecordActivity -> (serieName, 1)
+  val getKIncfunc = (record: RecordActivity) => {
+    (record.getSerieName, 1.0)
+  }
+  // RecordActivity -> (serieName, (value,1))
+  val getKValueIncfunc = (record: RecordActivity) => {
+    (record.getSerieName, (record.getStoredValue.toDouble, 1.0))
+  }
+  // RecordActivity -> (serieName, (value,1,mean,variance,deviation))
+  val getValuesFromRecordActivity = (record: RecordActivity, windowSize: List[TradingLookback]) => {
+    val value = record.getStoredValue.toDouble //1
+    val sum = value //2
+    val count = 1.0 //3
+    val mean = value / count //4
+    val variance = 0.0 //5
+    val deviation = 0.0 //6
+    val zScore = 0.0 //7
+    ((record.getSerieName, windowSize), (value, sum, count, mean, variance, deviation, zScore))
+  }
+  // SLIDING
+  // on a value
+  val addNewFunc = (accumulator: Double, current: Double) => {
+    accumulator + current
+  }
+  val subOldFunc = (accumulator: Double, current: Double) => {
+    accumulator - current
+  }
+  // on (value,count)
+  val addNewPairFunc = (accumulator: (Double, Double), current: (Double, Double)) => {
+    (accumulator._1 + current._1, accumulator._2 + current._2) // values added, counts added
+  }
+  val subOldPairFunc = (accumulator: (Double, Double), current: (Double, Double)) => {
+    (accumulator._1 - current._1, accumulator._2 - current._2) // values subtracted, counts subtracted
+  }
+  // on several (name, (value, count, mean, variance, deviation))
+  val addInsightFunc = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
+                        current: (Double, Double, Double, Double, Double, Double, Double)) => {
+    val value = current._1
+    val valueTotal = accumulator._2 + current._2
+    val countTotal = accumulator._3 + current._3
+    val meanTodate = valueTotal / countTotal
+    val currentScore = value - meanTodate
+    val varianceTotal = accumulator._5 + currentScore * currentScore // sum of square scores
+    val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
+    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+  }
+  val subInsightFunc = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
+                        current: (Double, Double, Double, Double, Double, Double, Double)) => {
+    val value = current._1
+    val valueTotal = accumulator._2 - current._2
+    val countTotal = accumulator._3 - current._3
+    val meanTodate = valueTotal / countTotal
+    val currentScore = value - meanTodate
+    val varianceTotal = accumulator._5 - currentScore * currentScore // sum of square scores
+    val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
+    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+  }
 // STRUCTURED STREAMING
 // https://spark.apache.org/docs/latest/streaming-programming-guide.html
 // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
@@ -171,27 +182,34 @@ val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double,Do
 // https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
 // https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
 // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
-val reduceDstreamByKeyAndWindow = (dStream: DStream[(String, (Double,Double,Double,Double,Double,Double,Double))],
-                                   windowLength:Duration, slideInterval:Duration) => {
-  dStream.reduceByKeyAndWindow(// key not mentioned
-    addInsightFunc, // Adding elements in the new batches entering the window
-    subInsightFunc, // Removing elements from the oldest batches exiting the window
-    windowLength, // Window duration
-    slideInterval) // Slide duration
-}
-// PRINT
-val printMean = (x: (String, (Double,Double,Double,Double,Double,Double,Double))) => {
-  //  val mean = x._2._1 / x._2._2
-  //  val pair = (x._1, mean)  // seriename, mean
-  //  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
-  //    println(pair)
-  //  } else {
-  //    print(x)
-  //  }
-  println(x)
-}
-val printPairRDD = (x: RDD[(String, (Double,Double,Double,Double,Double,Double,Double))]) => {
-  x.collect().foreach(printMean)
+//
+// NOTE on input dStream: ((name,lookbackWindowSec),(d,d,d,d,d,d,d)), where each d is a statistical measure
+  val reduceDstreamByKeyAndWindow = (dStream: DStream[((String,String), (Double,Double,Double,Double,Double,Double,Double))],
+                                     windowLengthSec:Long, slideIntervalSec:Long) => {
+    (dStream
+      .filter(r => r._1._2.equals(windowLengthSec.toString))      // process each item only once (each item was previously flatmapped)
+      .reduceByKeyAndWindow(                                      // key not mentioned
+      StatFunctions.addInsightFunc,                                             // Adding elements in the new batches entering the window
+      StatFunctions.subInsightFunc,                                             // Removing elements from the oldest batches exiting the window
+      Seconds(windowLengthSec),                                   // Window duration
+      Seconds(slideIntervalSec)                                   // Slide duration
+      )
+    )
+  }
+  // PRINT
+  val printStats = (x: ((String,String),(Double,Double,Double,Double,Double,Double,Double))) => {
+    //  val mean = x._2._1 / x._2._2
+    //  val pair = (x._1, mean)  // seriename, mean
+    //  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
+    //    println(pair)
+    //  } else {
+    //    print(x)
+    //  }
+    println(x)
+  }
+  val outputStatsRDD = (x: RDD[(((String,String),(Double,Double,Double,Double,Double,Double,Double)))]) => {
+    x.collect().foreach(printStats)
+  }
 }
 
 // == D-STREAM ==
@@ -202,41 +220,64 @@ val printPairRDD = (x: RDD[(String, (Double,Double,Double,Double,Double,Double,D
 // https://spark.apache.org/docs/latest/streaming-kinesis-integration.html#running-the-example
 //
 // Create the Kinesis DStreams:
-val kinesisDstreams = (0 until numShards).map { i =>
+@transient val kinesisDstreams = (0 until numShards).map { i =>
   KinesisUtils.createStream(ssc, appName.toString, streamName, endPoint,
     region.toString, initialPosition, streamCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2)
 }
 
-val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
+@transient val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 // unionDstream.print()
 
-val recordDstream = (unionDstream
-    .map(getStringFromByteArray)  // string from byte array, getStringFromByteArray
-    .map(getDeserializedRecordActivity)
-    .filter(isPriceDataType)
-    .filter(isRealtimeDataTiming)
+
+@transient val recordWindowValuesDstream = (unionDstream
+    .map(StatFunctions.getStringFromByteArray)                     // string from byte array, getStringFromByteArray
+    .map(StatFunctions.getDeserializedRecordActivity)
+    .filter(r => StatFunctions.isPriceDataType(r, DataType.PRICE))
+    .filter(StatFunctions.isRealtimeDataTiming)
+//    .flatMap(record => {
+//      val value = record.getStoredValue.toDouble //1
+//      val sum = value //2
+//      val count = 1.0 //3
+//      val mean = value / count //4
+//      val variance = 0.0 //5
+//      val deviation = 0.0 //6
+//      val zScore = 0.0 //7
+//      val items = Seq[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
+//      for(lookback <- tradingLookbacks) {
+//                val toAdd = ((record.getSerieName, lookback.getWindowSec.toString), (value, sum, count, mean, variance, deviation, zScore))
+//                items:+toAdd
+//              }
+//      items
+//      }
+//    )
+
+//    .flatMap(r => getValuesFromRecordActivity(r, tradingLookbacks))                // for each stream (pair records for specific windows) turn a RecordActivity into a tuple of statistical values
+//    .flatMap(recordValues => {                       // emit a row for every window that will be reduced: ((name,window),(d,d,d,d,d,d,d)
+//      val items = Seq[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
+//      for(lookback <- tradingLookbacks) {
+//        val toAdd = ((recordValues._1,lookback.getWindowSec.toString),(recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1))
+//        items:+toAdd
+//      }
+//      items
+//      }
+//    )
+//  )
   )
-// recordDstream.print()
 
-import scala.collection.JavaConversions._
-val factory = new LookbackFactory()
-val tradingLookbacks = factory.getAll
-
-val recordValuesByLookbackDstreamList = (tradingLookbacks
-  .map { lookback => recordDstream.filter(r => r.getSerieName.contains(lookback.getWindowSec.toString))} // each list only has relevant records
-  .map(recordDstream => recordDstream.map(getRecordValuesfunc)) // for each stream (pair records for specific windows) turn a RecordActivity into a tuple of statistical values
-  )
-// recordValuesByLookbackDstreamList.print()
-
+recordWindowValuesDstream.print()
 
 // TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
-val kInsightsByLookbackDStream = (recordValuesByLookbackDstreamList
-  .map(recordValues => reduceDstreamByKeyAndWindow(recordValues, windowLength, slideInterval))
-  )
-//kInsightsByLookbackDStream.print()
+//val kInsightsByLookbackDStreamList = (tradingLookbacks
+//    .map(tradingLookbacks => {
+//      reduceDstreamByKeyAndWindow(recordWindowValuesDstream, tradingLookbacks.getWindowSec, tradingLookbacks.getSlideIntervalSec)
+//    }
+//  )
 
-kInsightsByLookbackDStream.map(kInsightsDStream => kInsightsDStream.foreachRDD(printPairRDD))
-//kInsightsDStream.foreachRDD(printPairRDD)
+
+//kInsightsByLookbackDStreamList.map(stream => stream.foreachRDD(outputStatsRDD))
+
+
+
 
 
 // JOIN
