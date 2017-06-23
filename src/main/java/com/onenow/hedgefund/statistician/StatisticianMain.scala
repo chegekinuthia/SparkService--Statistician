@@ -11,24 +11,16 @@
 //
 // example https://github.com/snowplow/spark-streaming-example-project
 
-// IMPORT THIRD PARTY
-import java.util
-
-import com.amazonaws.regions._
-import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+// == IMPORT ==
+// NOW
 import com.onenow.hedgefund.discrete.{DataTiming, DataType, DeployEnv, ServiceType}
 import com.onenow.hedgefund.event.PairActivity
 import com.onenow.hedgefund.util.Piping
-import org.apache.spark
-import org.apache.spark.rdd.RDD
-import org.joda.time.Seconds
-
-import scala.collection.TraversableOnce
-
-// import org.apache.spark.storage.StorageLevel
-// import org.apache.spark.streaming.kinesis.KinesisUtils
-// import org.apache.spark.streaming.{Duration, Milliseconds, Seconds, StreamingContext}
-
+import com.onenow.hedgefund.integration.SectorName
+// AWS
+import com.amazonaws.regions._
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+// SPARK
 import org.apache.spark._
 import org.apache.spark.sql._
 import org.apache.spark.storage._
@@ -36,7 +28,13 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.kinesis._
 import org.apache.spark.streaming.{StreamingContext, Seconds, Minutes, Time, Duration}
 import org.apache.spark.streaming.dstream._
-
+import org.apache.spark
+import org.apache.spark.rdd.RDD
+// import org.apache.spark.storage.StorageLevel
+// import org.apache.spark.streaming.kinesis.KinesisUtils
+// import org.apache.spark.streaming.{Duration, Milliseconds, Seconds, StreamingContext}
+// OTHER
+import java.util
 import java.nio.ByteBuffer
 import scala.util.Random
 
@@ -46,7 +44,7 @@ import scala.collection.JavaConversions._
 import collection.mutable._
 import com.onenow.hedgefund.lookback.{LookbackFactory, TradingLookback}
 val factory = new LookbackFactory()
-val tradingLookbacks = factory.getAll
+val lookbacks = factory.getFast
 
 
 // == INSTANTIATE KINESIS ==
@@ -203,12 +201,12 @@ val recordValuesPerWindowDstream = (unionDstream
     .map(StatFunctions.getDeserializedPairActivity)
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
-    .flatMap(r => StatFunctions.getWindowValuesFromPairActivity(r, tradingLookbacks.toList))
+    .flatMap(r => StatFunctions.getWindowValuesFromPairActivity(r, lookbacks.toList))
   )
 //recordValuesPerWindowDstream.print()
 
 
-val statsDstreamList = (tradingLookbacks.toList.map(lookback => {
+val statsDstreamList = (lookbacks.toList.map(lookback => {
     recordValuesPerWindowDstream
       .filter(r => r._1._2.equals(lookback.getWindowSec.toString))  // for each lookback process only items flatmapped for that
       .reduceByKeyAndWindow(                                        // key not mentioned
