@@ -18,3 +18,4 @@ cp /Users/pablo/git/Library--Event/target/event-0.0.0-SNAPSHOT.jar .
 cp /Users/pablo/git/Library--AWS-Kinesis/target/aws-kinesis-0.0.0-SNAPSHOT.jar .
 cp /Users/pablo/git/Library--AWS-Hifawn/target/aws-0.0.0-SNAPSHOT.jar .
 cp /Users/pablo/git/Library--Lookback/target/lookback-0.0.0-SNAPSHOT.jar .
+cp /Users/pablo/git/Library--Integration/target/integration-0.0.0-SNAPSHOT.jar .

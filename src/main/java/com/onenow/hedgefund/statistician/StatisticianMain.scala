@@ -17,7 +17,7 @@ import java.util
 import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.onenow.hedgefund.discrete.{DataTiming, DataType, DeployEnv, ServiceType}
-import com.onenow.hedgefund.event.RecordActivity
+import com.onenow.hedgefund.event.PairActivity
 import com.onenow.hedgefund.util.Piping
 import org.apache.spark
 import org.apache.spark.rdd.RDD
@@ -100,28 +100,28 @@ case object StatFunctions extends Serializable {
   val getStringFromByteArray = (entry: Array[Byte]) => {
     new String(entry)
   }
-  // json -> RecordActivity
-  val getDeserializedRecordActivity = (json: String) => {
-    val record: RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
-    record
+  // json -> PairActivity
+  val getDeserializedPairActivity = (json: String) => {
+    val event: PairActivity = Piping.deserialize(json, classOf[PairActivity])
+    event
   }
   // BOOLEAN
-  // RecordActivity -> isDataType(RecordActivity)
-  val isDataType = (record:RecordActivity, dataType:DataType) => {
-    record.getDatumType.toString.equals(dataType.toString)
+  // PairActivity -> isDataType(PairActivity)
+  val isDataType = (event:PairActivity, dataType:DataType) => {
+    event.getDatumType.toString.equals(dataType.toString)
   }
-  // RecordActivity -> isTiming(RecordActivity)
-  val isDataTiming = (record: RecordActivity, dataTiming:DataTiming) => {
-    record.getDatumTiming.toString.equals(dataTiming.toString)
+  // PairActivity -> isTiming(PairActivity)
+  val isDataTiming = (event: PairActivity, dataTiming:DataTiming) => {
+    event.getDatumTiming.toString.equals(dataTiming.toString)
   }
   // (serieName, value) -> isSeriesName(serieName, checkName)
   val isSeriesNamefunc = (kv: (String, Double), name: String) => {
     kv._1.toString.equals(name)
   }
   // UNBUNDLE
-  // RecordActivity -> ((serieName,lookback) (d,d,d,d,d,d,d)) for every lookback window
-  val getWindowValuesFromRecordActivity = (record: RecordActivity, lookbacks:List[TradingLookback]) => {
-    val value = record.getStoredValue.toDouble  //1
+  // PairActivity -> ((serieName,lookback) (d,d,d,d,d,d,d)) for every lookback window
+  val getWindowValuesFromPairActivity = (event: PairActivity, lookbacks:List[TradingLookback]) => {
+    val value = event.getStoredValue.toDouble  //1
     val sum = value                             //2
     val count = 1.0                             //3
     val mean = value / count                    //4
@@ -133,7 +133,7 @@ case object StatFunctions extends Serializable {
     val items = ListBuffer[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
 
     for(lookback <- lookbacks) {
-      val toAdd = ((record.getSerieName, lookback.getWindowSec.toString), (value, sum, count, mean, variance, deviation, zScore))
+      val toAdd = ((event.getSerieName, lookback.getWindowSec.toString), (value, sum, count, mean, variance, deviation, zScore))
       items += toAdd
     }
     items.toList
@@ -200,10 +200,10 @@ val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 @transient
 val recordValuesPerWindowDstream = (unionDstream
     .map(StatFunctions.getStringFromByteArray)                     // string from byte array, getStringFromByteArray
-    .map(StatFunctions.getDeserializedRecordActivity)
+    .map(StatFunctions.getDeserializedPairActivity)
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
-    .flatMap(r => StatFunctions.getWindowValuesFromRecordActivity(r, tradingLookbacks.toList))
+    .flatMap(r => StatFunctions.getWindowValuesFromPairActivity(r, tradingLookbacks.toList))
   )
 //recordValuesPerWindowDstream.print()
 
