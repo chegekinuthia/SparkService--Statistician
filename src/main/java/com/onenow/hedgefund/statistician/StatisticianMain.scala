@@ -119,18 +119,6 @@ case object StatFunctions extends Serializable {
     kv._1.toString.equals(name)
   }
   // UNBUNDLE
-  // RecordActivity -> (serieName, value)
-  val getKVfunc = (record: RecordActivity) => {
-    (record.getSerieName, record.getStoredValue.toDouble)
-  }
-  // RecordActivity -> (serieName, 1)
-  val getKIncfunc = (record: RecordActivity) => {
-    (record.getSerieName, 1.0)
-  }
-  // RecordActivity -> (serieName, (value,1))
-  val getKValueIncfunc = (record: RecordActivity) => {
-    (record.getSerieName, (record.getStoredValue.toDouble, 1.0))
-  }
   // RecordActivity -> ((serieName,lookback) (d,d,d,d,d,d,d)) for every lookback window
   val getWindowValuesFromRecordActivity = (record: RecordActivity, lookbacks:List[TradingLookback]) => {
     val value = record.getStoredValue.toDouble  //1
@@ -158,19 +146,6 @@ case object StatFunctions extends Serializable {
   // https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
   // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
   //
-  val addNewFunc = (accumulator: Double, current: Double) => {
-    accumulator + current
-  }
-  val subOldFunc = (accumulator: Double, current: Double) => {
-    accumulator - current
-  }
-  // on (value,count)
-  val addNewPairFunc = (accumulator: (Double, Double), current: (Double, Double)) => {
-    (accumulator._1 + current._1, accumulator._2 + current._2) // values added, counts added
-  }
-  val subOldPairFunc = (accumulator: (Double, Double), current: (Double, Double)) => {
-    (accumulator._1 - current._1, accumulator._2 - current._2) // values subtracted, counts subtracted
-  }
   // on several (name, (value, count, mean, variance, deviation))
   val addInsightFunc = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
                         current: (Double, Double, Double, Double, Double, Double, Double)) => {
