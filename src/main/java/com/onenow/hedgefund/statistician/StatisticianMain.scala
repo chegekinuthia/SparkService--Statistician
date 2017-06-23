@@ -150,8 +150,14 @@ case object StatFunctions extends Serializable {
     }
     items.toList
   }
-  // SLIDING
-  // on a value
+  // STRUCTURED STREAMING
+  // https://spark.apache.org/docs/latest/streaming-programming-guide.html
+  // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
+  // http://spark.apache.org/docs/latest/api/python/pyspark.html?highlight=reducebykey
+  // https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
+  // https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
+  // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
+  //
   val addNewFunc = (accumulator: Double, current: Double) => {
     accumulator + current
   }
@@ -188,40 +194,12 @@ case object StatFunctions extends Serializable {
     val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
     (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
   }
-// STRUCTURED STREAMING
-// https://spark.apache.org/docs/latest/streaming-programming-guide.html
-// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
-// http://spark.apache.org/docs/latest/api/python/pyspark.html?highlight=reducebykey
-// https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
-// https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
-// sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
-//
-// NOTE on input dStream: ((name,lookbackWindowSec),(d,d,d,d,d,d,d)), where each d is a statistical measure
-  val reduceByKeyAndWindow = (dStream: DStream[(String, (Double,Double,Double,Double,Double,Double,Double))],
-                                     windowLengthSec:Long, slideIntervalSec:Long) => {
-    (dStream
-//      .filter(r => r._1._2.equals(windowLengthSec.toString))      // process each item only once (each item was previously flatmapped)
-      .reduceByKeyAndWindow(                                      // key not mentioned
-      StatFunctions.addInsightFunc,                                             // Adding elements in the new batches entering the window
-      StatFunctions.subInsightFunc,                                             // Removing elements from the oldest batches exiting the window
-      Seconds(windowLengthSec),                                   // Window duration
-      Seconds(slideIntervalSec)                                   // Slide duration
-      )
-    )
+  // EMIT OUTPUT
+  val emitStats = (entry: ((String,String),(Double,Double,Double,Double,Double,Double,Double))) => {
+    println(entry)
   }
-  // PRINT
-  val printStats = (x: (String,(Double,Double,Double,Double,Double,Double,Double))) => {
-    //  val mean = x._2._1 / x._2._2
-    //  val pair = (x._1, mean)  // seriename, mean
-    //  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
-    //    println(pair)
-    //  } else {
-    //    print(x)
-    //  }
-    println(x)
-  }
-  val outputStatsRDD = (rdd: RDD[(String,(Double,Double,Double,Double,Double,Double,Double))]) => {
-    rdd.collect().foreach(printStats)
+  val emitStatsRDD = (rdd: RDD[((String,String),(Double,Double,Double,Double,Double,Double,Double))]) => {
+    rdd.collect().foreach(emitStats)
   }
 }
 
@@ -245,57 +223,40 @@ val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 // unionDstream.print()
 
 @transient
-val recordWindowValuesDstream = (unionDstream
+val recordValuesPerWindowDstream = (unionDstream
     .map(StatFunctions.getStringFromByteArray)                     // string from byte array, getStringFromByteArray
     .map(StatFunctions.getDeserializedRecordActivity)
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
     .flatMap(r => StatFunctions.getWindowValuesFromRecordActivity(r, tradingLookbacks.toList))
   )
-recordWindowValuesDstream.print()
+//recordValuesPerWindowDstream.print()
 
-// TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
-//val kInsightsByLookbackDStreamList = (tradingLookbacks
-//    .map(tradingLookbacks => {
-//      StatFunctions.reduceByKeyAndWindow(recordWindowValuesDstream, tradingLookbacks.getWindowSec, tradingLookbacks.getSlideIntervalSec)
-//    }
-//  )
-//)
+
+val insightDstreamList = (tradingLookbacks.toList.map(lookback => {
+    recordValuesPerWindowDstream
+      .filter(r => r._1._2.equals(lookback.getWindowSec.toString))  // for each lookback process only items flatmapped for that
+      .reduceByKeyAndWindow(                                        // key not mentioned
+        StatFunctions.addInsightFunc,                               // Adding elements in the new batches entering the window
+        StatFunctions.subInsightFunc,                               // Removing elements from the oldest batches exiting the window
+        Seconds(lookback.getWindowSec),                             // Window duration
+        Seconds(lookback.getSlideIntervalSec)                       // Slide duration
+      )
+    }
+  )
+)
 
 // == OUTPUT ==
-//kInsightsByLookbackDStreamList.map(stream => stream.foreachRDD(StatFunctions.outputStatsRDD))
+insightDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitStatsRDD))
 
 
+// == WATERMARKING ==
+// TODO: https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html
 
 
+// == STREAMING CONFIG ==
 
-// JOIN
-// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
-// When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W))
-// TODO: join(otherDataset, [numTasks])
-//val meanByKey = kvSumDStream.join(kvCountrDStream).map(joined => {
-//              val sum = joined._2._1
-//              val count = joined._2._2
-//              val mean = sum/count
-//              (joined._1, mean, sum, count)  // serieName, mean...
-//            }
-//)
-//meanByKey.print()
-
-// Register a temp table at every batch interval so that it can be queried separately
-// https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
-//meanByKey.window(windowLength).foreachRDD { rdd =>  // Duration(60000)
-//  // spark.sqlContext.createDataFrame(rdd).toDF("adId", "clicks", "impressions", "CTR", "Time").registerTempTable("ctr")
-//  rdd.take(1)
-//}
-
-
-// WATERMARKING
-// https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html
-
-// STREAMING CONFIG
-// To make sure data is not deleted by the time we query it interactively
-ssc.remember(contextRemember)
+ssc.remember(contextRemember)     // Make sure data is not deleted by the time we query it interactively
 
 ssc.checkpoint(checkpointFolder)
 
@@ -305,5 +266,6 @@ ssc.start()
 ssc.awaitTerminationOrTimeout(streamingContextTimeout) // time to wait in milliseconds; and/or run stopSparkContext above
 // ssc.awaitTermination()
 
-// FORCE STOP
+
+// == FORCE STOP ==
 // StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }
