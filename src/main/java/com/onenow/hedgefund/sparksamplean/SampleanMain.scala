@@ -22,6 +22,7 @@ import com.onenow.hedgefund.lookback.LookbackFactory
 import com.onenow.hedgefund.util.Piping
 import org.apache.spark
 import org.apache.spark.rdd.RDD
+import org.joda.time.Seconds
 
 // import org.apache.spark.storage.StorageLevel
 // import org.apache.spark.streaming.kinesis.KinesisUtils
@@ -79,18 +80,22 @@ val spark = SparkSession.builder().getOrCreate()
 
 // == FUNCTIONS ==
 // DESERIALIZE
+// byteArray -> String(byteArray)
+val getStringFromByteArray = (entry:Array[Byte]) => {
+  new String(entry)
+}
 // json -> RecordActivity
-val deserializefunc = (json: String) => {
+val getDeserializedRecordActivity = (json: String) => {
   val record:RecordActivity = Piping.deserialize(json, classOf[RecordActivity])
   record
 }
 // BOOLEAN
-// RecordActivity -> isDataType(RecordActivity)
-val isPricefunc = (record: RecordActivity) => {
+// RecordActivity -> isPriceDataType(RecordActivity)
+val isPriceDataType = (record:RecordActivity) => {
   record.getDatumType.toString.equals(DataType.PRICE.toString)
 }
 // RecordActivity -> isTiming(RecordActivity)
-val isRealtimefunc = (record: RecordActivity) => {
+val isRealtimeDataTiming = (record:RecordActivity) => {
   record.getDatumTiming.toString.equals(DataTiming.REALTIME.toString)
 }
 // (serieName, value) -> isSeriesName(serieName, checkName)
@@ -166,7 +171,8 @@ val subInsightFunc = (accumulator: (Double,Double,Double,Double,Double,Double,Do
 // https://stackoverflow.com/questions/24071560/using-reducebykey-in-apache-spark-scala
 // https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
 // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
-val reduceDstreamByKeyAndWindow = (dStream: DStream[(String, (Double,Double,Double,Double,Double,Double,Double))]) => {
+val reduceDstreamByKeyAndWindow = (dStream: DStream[(String, (Double,Double,Double,Double,Double,Double,Double))],
+                                   windowLength:Duration, slideInterval:Duration) => {
   dStream.reduceByKeyAndWindow(// key not mentioned
     addInsightFunc, // Adding elements in the new batches entering the window
     subInsightFunc, // Removing elements from the oldest batches exiting the window
@@ -205,8 +211,10 @@ val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 // unionDstream.print()
 
 val recordDstream = (unionDstream
-  .map(byteArray => new String(byteArray))  // string from byte array
-  .map(deserializefunc).filter(isPricefunc) // price record
+    .map(getStringFromByteArray)  // string from byte array, getStringFromByteArray
+    .map(getDeserializedRecordActivity)
+    .filter(isPriceDataType)
+    .filter(isRealtimeDataTiming)
   )
 // recordDstream.print()
 
@@ -223,7 +231,7 @@ val recordValuesByLookbackDstreamList = (tradingLookbacks
 
 // TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
 val kInsightsByLookbackDStream = (recordValuesByLookbackDstreamList
-  .map(reduceDstreamByKeyAndWindow)
+  .map(recordValues => reduceDstreamByKeyAndWindow(recordValues, windowLength, slideInterval))
   )
 //kInsightsByLookbackDStream.print()
 
