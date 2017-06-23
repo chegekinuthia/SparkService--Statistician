@@ -81,9 +81,12 @@ val streamingContextTimeout = 60L *1000
 // Spark context available as 'sc' (master = local[4], app id = local-1497911109319).
 // Spark session available as 'spark'
 StreamingContext.getActive.foreach { _.stop(stopSparkContext = false) }  // stop the streaming contexts without stopping the spark context
-@transient val sc = SparkContext.getOrCreate()
-@transient val ssc = new StreamingContext(sc, contextBatchDuration) // use in databricks
-@transient val spark = SparkSession.builder().getOrCreate()
+@transient
+val sc = SparkContext.getOrCreate()
+@transient
+val ssc = new StreamingContext(sc, contextBatchDuration) // use in databricks
+@transient
+val spark = SparkSession.builder().getOrCreate()
 
 
 // == FUNCTIONS ==
@@ -101,13 +104,13 @@ case object StatFunctions extends Serializable {
     record
   }
   // BOOLEAN
-  // RecordActivity -> isPriceDataType(RecordActivity)
-  val isPriceDataType = (record:RecordActivity, dataType:DataType) => {
+  // RecordActivity -> isDataType(RecordActivity)
+  val isDataType = (record:RecordActivity, dataType:DataType) => {
     record.getDatumType.toString.equals(dataType.toString)
   }
   // RecordActivity -> isTiming(RecordActivity)
-  val isRealtimeDataTiming = (record: RecordActivity) => {
-    record.getDatumTiming.toString.equals(DataTiming.REALTIME.toString)
+  val isDataTiming = (record: RecordActivity, dataTiming:DataTiming) => {
+    record.getDatumTiming.toString.equals(dataTiming.toString)
   }
   // (serieName, value) -> isSeriesName(serieName, checkName)
   val isSeriesNamefunc = (kv: (String, Double), name: String) => {
@@ -220,28 +223,31 @@ case object StatFunctions extends Serializable {
 // https://spark.apache.org/docs/latest/streaming-kinesis-integration.html#running-the-example
 //
 // Create the Kinesis DStreams:
-@transient val kinesisDstreams = (0 until numShards).map { i =>
+@transient
+val kinesisDstreams = (0 until numShards).map { i =>
   KinesisUtils.createStream(ssc, appName.toString, streamName, endPoint,
     region.toString, initialPosition, streamCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2)
 }
 
-@transient val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
+@transient
+val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 // unionDstream.print()
 
 
-@transient val recordWindowValuesDstream = (unionDstream
+@transient
+val recordWindowValuesDstream = (unionDstream
     .map(StatFunctions.getStringFromByteArray)                     // string from byte array, getStringFromByteArray
     .map(StatFunctions.getDeserializedRecordActivity)
-    .filter(r => StatFunctions.isPriceDataType(r, DataType.PRICE))
-    .filter(StatFunctions.isRealtimeDataTiming)
+    .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
+    .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
 //    .flatMap(record => {
-//      val value = record.getStoredValue.toDouble //1
-//      val sum = value //2
-//      val count = 1.0 //3
-//      val mean = value / count //4
-//      val variance = 0.0 //5
-//      val deviation = 0.0 //6
-//      val zScore = 0.0 //7
+//      val value = record.getStoredValue.toDouble  //1
+//      val sum = value                             //2
+//      val count = 1.0                             //3
+//      val mean = value / count                    //4
+//      val variance = 0.0                          //5
+//      val deviation = 0.0                         //6
+//      val zScore = 0.0                            //7
 //      val items = Seq[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
 //      for(lookback <- tradingLookbacks) {
 //                val toAdd = ((record.getSerieName, lookback.getWindowSec.toString), (value, sum, count, mean, variance, deviation, zScore))
