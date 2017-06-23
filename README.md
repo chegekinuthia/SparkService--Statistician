@@ -36,7 +36,7 @@ bash startSpark.sh
 Follow the instructions in https://spark.apache.org/docs/latest/streaming-kinesis-integration.html#running-the-example
 
 
-### Dependency
+### Dependencies
 
 #### Spark
 
