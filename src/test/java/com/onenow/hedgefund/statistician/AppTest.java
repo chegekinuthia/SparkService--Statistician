@@ -1,4 +1,4 @@
-package com.onenow.hedgefund.sparksamplean;
+package com.onenow.hedgefund.statistician;
 
 import junit.framework.Test;
 import junit.framework.TestCase;

@@ -2,7 +2,7 @@
 # https://stackoverflow.com/questions/37132559/add-jars-to-a-spark-job-spark-submit
 
 ### MAIN
-cp ../src/main/java/com/onenow/hedgefund/sparksamplean/SampleanMain.scala ./configuration/job.scala
+cp ../src/main/java/com/onenow/hedgefund/statistician/StatisticianMain.scala ./configuration/job.scala
 # cp /Users/pablo/git/SparkService--Samplean/src/main/java/com/onenow/hedgefund/sparksamplean/SampleanMain.scala ./configuration/job.scala
 
 cd configuration
