@@ -173,7 +173,7 @@ case object StatFunctions extends Serializable {
   val emitStats = (entry: ((String,String),(Double,Double,Double,Double,Double,Double,Double))) => {
     println(entry)
   }
-  val emitStatsRDD = (rdd: RDD[((String,String),(Double,Double,Double,Double,Double,Double,Double))]) => {
+  val emitRddStats = (rdd: RDD[((String,String),(Double,Double,Double,Double,Double,Double,Double))]) => {
     rdd.collect().foreach(emitStats)
   }
 }
@@ -208,7 +208,7 @@ val recordValuesPerWindowDstream = (unionDstream
 //recordValuesPerWindowDstream.print()
 
 
-val insightDstreamList = (tradingLookbacks.toList.map(lookback => {
+val statsDstreamList = (tradingLookbacks.toList.map(lookback => {
     recordValuesPerWindowDstream
       .filter(r => r._1._2.equals(lookback.getWindowSec.toString))  // for each lookback process only items flatmapped for that
       .reduceByKeyAndWindow(                                        // key not mentioned
@@ -222,7 +222,7 @@ val insightDstreamList = (tradingLookbacks.toList.map(lookback => {
 )
 
 // == OUTPUT ==
-insightDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitStatsRDD))
+statsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))
 
 
 // == WATERMARKING ==
