@@ -1,4 +1,11 @@
-# SparkService--Samplea
+# SparkService--Statistician
+
+This service computes streaming values: mean, variance, score, zScore 
+
+It does so for any number of input time series
+
+And across any number of time windows
+
 
 ### Run on Spark shell
 
@@ -11,6 +18,7 @@ bash gatherJars.sh
 bash startSpark.sh 
 
 :load StatisticianMain.scala 
+
 
 #### Submitting to a Spark cluster
 
