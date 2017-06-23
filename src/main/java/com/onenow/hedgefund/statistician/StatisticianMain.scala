@@ -18,7 +18,6 @@ import com.amazonaws.regions._
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.onenow.hedgefund.discrete.{DataTiming, DataType, DeployEnv, ServiceType}
 import com.onenow.hedgefund.event.RecordActivity
-import com.onenow.hedgefund.lookback.{LookbackFactory, TradingLookback}
 import com.onenow.hedgefund.util.Piping
 import org.apache.spark
 import org.apache.spark.rdd.RDD
@@ -44,6 +43,8 @@ import scala.util.Random
 
 // == WINDOW LOOKBACKS ==
 import scala.collection.JavaConversions._
+import collection.mutable._
+import com.onenow.hedgefund.lookback.{LookbackFactory, TradingLookback}
 val factory = new LookbackFactory()
 val tradingLookbacks = factory.getAll
 
@@ -57,6 +58,7 @@ val deployEnv = DeployEnv.STAGING;
 val region = "us-east-1" // Kinesis.defaultRegion
 val endPoint = "https://kinesis.us-east-1.amazonaws.com"
 val streamName = ServiceType.REPLAY.toString + "-" + deployEnv.toString
+
 
 // == TIMING ==
 // streams:
@@ -129,16 +131,24 @@ case object StatFunctions extends Serializable {
   val getKValueIncfunc = (record: RecordActivity) => {
     (record.getSerieName, (record.getStoredValue.toDouble, 1.0))
   }
-  // RecordActivity -> (serieName, (value,1,mean,variance,deviation))
-  val getValuesFromRecordActivity = (record: RecordActivity, windowSize: List[TradingLookback]) => {
-    val value = record.getStoredValue.toDouble //1
-    val sum = value //2
-    val count = 1.0 //3
-    val mean = value / count //4
-    val variance = 0.0 //5
-    val deviation = 0.0 //6
-    val zScore = 0.0 //7
-    ((record.getSerieName, windowSize), (value, sum, count, mean, variance, deviation, zScore))
+  // RecordActivity -> ((serieName,lookback) (d,d,d,d,d,d,d)) for every lookback window
+  val getWindowValuesFromRecordActivity = (record: RecordActivity, lookbacks:List[TradingLookback]) => {
+    val value = record.getStoredValue.toDouble  //1
+    val sum = value                             //2
+    val count = 1.0                             //3
+    val mean = value / count                    //4
+    val variance = 0.0                          //5
+    val deviation = 0.0                         //6
+    val zScore = 0.0                            //7
+
+    import scala.collection.mutable.ListBuffer
+    val items = ListBuffer[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
+
+    for(lookback <- lookbacks) {
+      val toAdd = ((record.getSerieName, lookback.getWindowSec.toString), (value, sum, count, mean, variance, deviation, zScore))
+      items += toAdd
+    }
+    items.toList
   }
   // SLIDING
   // on a value
@@ -187,10 +197,10 @@ case object StatFunctions extends Serializable {
 // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
 //
 // NOTE on input dStream: ((name,lookbackWindowSec),(d,d,d,d,d,d,d)), where each d is a statistical measure
-  val reduceDstreamByKeyAndWindow = (dStream: DStream[((String,String), (Double,Double,Double,Double,Double,Double,Double))],
+  val reduceByKeyAndWindow = (dStream: DStream[(String, (Double,Double,Double,Double,Double,Double,Double))],
                                      windowLengthSec:Long, slideIntervalSec:Long) => {
     (dStream
-      .filter(r => r._1._2.equals(windowLengthSec.toString))      // process each item only once (each item was previously flatmapped)
+//      .filter(r => r._1._2.equals(windowLengthSec.toString))      // process each item only once (each item was previously flatmapped)
       .reduceByKeyAndWindow(                                      // key not mentioned
       StatFunctions.addInsightFunc,                                             // Adding elements in the new batches entering the window
       StatFunctions.subInsightFunc,                                             // Removing elements from the oldest batches exiting the window
@@ -200,7 +210,7 @@ case object StatFunctions extends Serializable {
     )
   }
   // PRINT
-  val printStats = (x: ((String,String),(Double,Double,Double,Double,Double,Double,Double))) => {
+  val printStats = (x: (String,(Double,Double,Double,Double,Double,Double,Double))) => {
     //  val mean = x._2._1 / x._2._2
     //  val pair = (x._1, mean)  // seriename, mean
     //  if(!pair._2.equals(Double.PositiveInfinity) && !pair._2.equals(Double.NaN)) {
@@ -210,10 +220,11 @@ case object StatFunctions extends Serializable {
     //  }
     println(x)
   }
-  val outputStatsRDD = (x: RDD[(((String,String),(Double,Double,Double,Double,Double,Double,Double)))]) => {
-    x.collect().foreach(printStats)
+  val outputStatsRDD = (rdd: RDD[(String,(Double,Double,Double,Double,Double,Double,Double))]) => {
+    rdd.collect().foreach(printStats)
   }
 }
+
 
 // == D-STREAM ==
 // In every microbatch get the union of shard streams
@@ -233,54 +244,26 @@ val kinesisDstreams = (0 until numShards).map { i =>
 val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 // unionDstream.print()
 
-
 @transient
 val recordWindowValuesDstream = (unionDstream
     .map(StatFunctions.getStringFromByteArray)                     // string from byte array, getStringFromByteArray
     .map(StatFunctions.getDeserializedRecordActivity)
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
-//    .flatMap(record => {
-//      val value = record.getStoredValue.toDouble  //1
-//      val sum = value                             //2
-//      val count = 1.0                             //3
-//      val mean = value / count                    //4
-//      val variance = 0.0                          //5
-//      val deviation = 0.0                         //6
-//      val zScore = 0.0                            //7
-//      val items = Seq[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
-//      for(lookback <- tradingLookbacks) {
-//                val toAdd = ((record.getSerieName, lookback.getWindowSec.toString), (value, sum, count, mean, variance, deviation, zScore))
-//                items:+toAdd
-//              }
-//      items
-//      }
-//    )
-
-//    .flatMap(r => getValuesFromRecordActivity(r, tradingLookbacks))                // for each stream (pair records for specific windows) turn a RecordActivity into a tuple of statistical values
-//    .flatMap(recordValues => {                       // emit a row for every window that will be reduced: ((name,window),(d,d,d,d,d,d,d)
-//      val items = Seq[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
-//      for(lookback <- tradingLookbacks) {
-//        val toAdd = ((recordValues._1,lookback.getWindowSec.toString),(recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1, recordValues._2._1))
-//        items:+toAdd
-//      }
-//      items
-//      }
-//    )
-//  )
+    .flatMap(r => StatFunctions.getWindowValuesFromRecordActivity(r, tradingLookbacks.toList))
   )
-
 recordWindowValuesDstream.print()
 
 // TODO: reduceByKeyAndWindow(func, invFunc, windowLength, slideInterval, [numTasks])
 //val kInsightsByLookbackDStreamList = (tradingLookbacks
 //    .map(tradingLookbacks => {
-//      reduceDstreamByKeyAndWindow(recordWindowValuesDstream, tradingLookbacks.getWindowSec, tradingLookbacks.getSlideIntervalSec)
+//      StatFunctions.reduceByKeyAndWindow(recordWindowValuesDstream, tradingLookbacks.getWindowSec, tradingLookbacks.getSlideIntervalSec)
 //    }
 //  )
+//)
 
-
-//kInsightsByLookbackDStreamList.map(stream => stream.foreachRDD(outputStatsRDD))
+// == OUTPUT ==
+//kInsightsByLookbackDStreamList.map(stream => stream.foreachRDD(StatFunctions.outputStatsRDD))
 
 
 
