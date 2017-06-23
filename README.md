@@ -1,6 +1,6 @@
 # SparkService--Statistician
 
-This service computes streaming values, including: mean, variance, score, zScore 
+This service computes streaming summary statistics, including: mean, variance, score, zScore 
 
 It does so for any number of input time series
 
