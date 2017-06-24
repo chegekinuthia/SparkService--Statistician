@@ -120,20 +120,26 @@ case object StatFunctions extends Serializable {
   // UNBUNDLE
   // PairActivity -> ((serieName,sectorName,lookback) (d,d,d,d,d,d,d)) for every lookback window
   val getWindowValuesFromPairActivity = (event:PairActivity, lookbacks:List[TradingLookback]) => {
-    val value = event.getStoredValue.toDouble  //1
-    val sum = value                             //2
-    val count = 1.0                             //3
-    val mean = value / count                    //4
-    val variance = 0.0                          //5
-    val deviation = 0.0                         //6
-    val zScore = 0.0                            //7
+
+    val value = event.getStoredValue.toDouble   //PART 2: 1
+    val sum = value                             //PART 2: 2
+    val count = 1.0                             //PART 2: 3
+    val mean = value / count                    //PART 2: 4
+    val variance = 0.0                          //PART 2: 5
+    val deviation = 0.0                         //PART 2: 6
+    val zScore = 0.0                            //PART 2: 7
 
     import scala.collection.mutable.ListBuffer
     val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Double,Double))]()
 
     for(lookback <- lookbacks) {  // expand to one record per window
-      val toAdd = ((event.getSerieName, event.getSectorName.toString, lookback.getWindowSec.toString),
-        (value, sum, count, mean, variance, deviation, zScore))
+
+      val serieName = event.getSerieName                //PART 1: 1
+      val sectorName = event.getSectorName.toString     //PART 1: 2
+      val windowSec = lookback.getWindowSec.toString    //PART 1: 3
+
+      val toAdd = ((serieName, sectorName, windowSec), (value, sum, count, mean, variance, deviation, zScore))
+
       items += toAdd
     }
     items.toList
@@ -205,12 +211,12 @@ val eventValuesAllWindowsDstream = (unionDstream
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
     .flatMap(r => StatFunctions.getWindowValuesFromPairActivity(r, lookbacks.toList))
   )
-eventValuesAllWindowsDstream.print()
+// eventValuesAllWindowsDstream.print()
 
 
 val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
     eventValuesAllWindowsDstream
-      .filter(r => r._1._2.equals(lookback.getWindowSec.toString))  // for each lookback process only items flatmapped for that
+      .filter(r => r._1._3.equals(lookback.getWindowSec.toString))  // for each lookback: process only items flatmapped for that window
       .reduceByKeyAndWindow(                                        // key not mentioned
         StatFunctions.addEventToStats,                              // Adding elements in the new batches entering the window
         StatFunctions.subtractEventsFromStats,                      // Removing elements from the oldest batches exiting the window
