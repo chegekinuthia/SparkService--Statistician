@@ -128,7 +128,7 @@ case object StatFunctions extends Serializable {
     val variance = 0.0                          //PART 2: 5
     val deviation = 0.0                         //PART 2: 6
     val zScore = 0.0                            //PART 2: 7
-    val standardDeviationOverMean = 0.0         //PART 2: 8
+    val opportunity = 0.0                       //PART 2: 8
 
     import scala.collection.mutable.ListBuffer
     val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))]()
@@ -139,8 +139,8 @@ case object StatFunctions extends Serializable {
       val sectorName = event.getSectorName.toString     //PART 1: 2
       val windowSec = lookback.getWindowSec.toString    //PART 1: 3
 
-      val toAdd = ((serieName, sectorName, windowSec),                                        //PART 1
-        (value, sum, count, mean, variance, deviation, zScore, standardDeviationOverMean))    //PART 2
+      val toAdd = ((serieName, sectorName, windowSec),                          //PART 1
+        (value, sum, count, mean, variance, deviation, zScore, opportunity))    //PART 2
 
       items += toAdd
     }
@@ -164,10 +164,10 @@ case object StatFunctions extends Serializable {
     val currentScore = value - meanTodate
     val varianceTotal = accumulator._5 + currentScore * currentScore // sum of square scores
     val standardDeviation = scala.math.sqrt(varianceTotal)
-    val currentZscore = currentScore / standardDeviation // score / standard deviation
-    val standardDeviationOverMean = standardDeviation / meanTodate
+    val currentZscore = currentScore / standardDeviation
+    val opportunity = standardDeviation / meanTodate                 // an indication of % volatility
 
-    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, standardDeviationOverMean)
+    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, opportunity)
   }
   val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double,Double,Double,Double),
                                      current:(Double,Double,Double,Double,Double,Double,Double,Double)) => {
@@ -176,12 +176,12 @@ case object StatFunctions extends Serializable {
     val countTotal = accumulator._3 - current._3
     val meanTodate = valueTotal / countTotal
     val currentScore = value - meanTodate
-    val varianceTotal = accumulator._5 - currentScore * currentScore // sum of square scores
+    val varianceTotal = accumulator._5 - currentScore * currentScore  // sum of square scores
     val standardDeviation = scala.math.sqrt(varianceTotal)
-    val currentZscore = currentScore / standardDeviation // score / standard deviation
-    val standardDeviationOverMean = standardDeviation / meanTodate
+    val currentZscore = currentScore / standardDeviation              // an indication of % volatility
+    val opportunity = standardDeviation / meanTodate
 
-    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, standardDeviationOverMean)
+    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, opportunity)
   }
   // EMIT OUTPUT
   val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))) => {
@@ -236,12 +236,8 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
   )
 )
 
-// Identify the serie in each sector that is most deviated (standard deviation as percent of mean), for each window
-//windowStatsDstreamList.map(stream =>
-//  )
-
 // == OUTPUT ==
-windowStatsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))
+windowStatsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))  // statistics
 
 
 // == WATERMARKING ==
