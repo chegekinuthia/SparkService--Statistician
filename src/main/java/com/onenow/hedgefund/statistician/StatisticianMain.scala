@@ -11,6 +11,7 @@
 //
 // example https://github.com/snowplow/spark-streaming-example-project
 
+
 // == IMPORT ==
 // NOW
 import com.onenow.hedgefund.discrete.{DataTiming, DataType, DeployEnv, ServiceType}
@@ -55,7 +56,7 @@ val appName = ServiceType.REPLAY.toString;
 val deployEnv = DeployEnv.STAGING;
 val region = "us-east-1" // Kinesis.defaultRegion
 val endPoint = "https://kinesis.us-east-1.amazonaws.com"
-val streamName = ServiceType.REPLAY.toString + "-" + deployEnv.toString
+val inputStreamName = ServiceType.REPLAY.toString + "-" + deployEnv.toString
 
 
 // == TIMING ==
@@ -117,8 +118,8 @@ case object StatFunctions extends Serializable {
     kv._1.toString.equals(name)
   }
   // UNBUNDLE
-  // PairActivity -> ((serieName,lookback) (d,d,d,d,d,d,d)) for every lookback window
-  val getWindowValuesFromPairActivity = (event: PairActivity, lookbacks:List[TradingLookback]) => {
+  // PairActivity -> ((serieName,sectorName,lookback) (d,d,d,d,d,d,d)) for every lookback window
+  val getWindowValuesFromPairActivity = (event:PairActivity, lookbacks:List[TradingLookback]) => {
     val value = event.getStoredValue.toDouble  //1
     val sum = value                             //2
     val count = 1.0                             //3
@@ -128,10 +129,11 @@ case object StatFunctions extends Serializable {
     val zScore = 0.0                            //7
 
     import scala.collection.mutable.ListBuffer
-    val items = ListBuffer[((String,String),(Double,Double,Double,Double,Double,Double,Double))]()
+    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Double,Double))]()
 
-    for(lookback <- lookbacks) {
-      val toAdd = ((event.getSerieName, lookback.getWindowSec.toString), (value, sum, count, mean, variance, deviation, zScore))
+    for(lookback <- lookbacks) {  // expand to one record per window
+      val toAdd = ((event.getSerieName, event.getSectorName.toString, lookback.getWindowSec.toString),
+        (value, sum, count, mean, variance, deviation, zScore))
       items += toAdd
     }
     items.toList
@@ -145,8 +147,8 @@ case object StatFunctions extends Serializable {
   // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
   //
   // on several (name, (value, count, mean, variance, deviation))
-  val addInsightFunc = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
-                        current: (Double, Double, Double, Double, Double, Double, Double)) => {
+  val addEventToStats = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
+                             current: (Double, Double, Double, Double, Double, Double, Double)) => {
     val value = current._1
     val valueTotal = accumulator._2 + current._2
     val countTotal = accumulator._3 + current._3
@@ -156,8 +158,8 @@ case object StatFunctions extends Serializable {
     val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
     (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
   }
-  val subInsightFunc = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
-                        current: (Double, Double, Double, Double, Double, Double, Double)) => {
+  val subtractEventsFromStats = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
+                                     current: (Double, Double, Double, Double, Double, Double, Double)) => {
     val value = current._1
     val valueTotal = accumulator._2 - current._2
     val countTotal = accumulator._3 - current._3
@@ -168,10 +170,10 @@ case object StatFunctions extends Serializable {
     (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
   }
   // EMIT OUTPUT
-  val emitStats = (entry: ((String,String),(Double,Double,Double,Double,Double,Double,Double))) => {
+  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Double,Double))) => {
     println(entry)
   }
-  val emitRddStats = (rdd: RDD[((String,String),(Double,Double,Double,Double,Double,Double,Double))]) => {
+  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Double,Double))]) => {
     rdd.collect().foreach(emitStats)
   }
 }
@@ -187,7 +189,7 @@ case object StatFunctions extends Serializable {
 // Create the Kinesis DStreams:
 @transient
 val kinesisDstreams = (0 until numShards).map { i =>
-  KinesisUtils.createStream(ssc, appName.toString, streamName, endPoint,
+  KinesisUtils.createStream(ssc, appName.toString, inputStreamName, endPoint,
     region.toString, initialPosition, streamCheckpointInterval, StorageLevel.MEMORY_AND_DISK_2)
 }
 
@@ -196,22 +198,22 @@ val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 // unionDstream.print()
 
 @transient
-val recordValuesPerWindowDstream = (unionDstream
+val eventValuesAllWindowsDstream = (unionDstream
     .map(StatFunctions.getStringFromByteArray)                     // string from byte array, getStringFromByteArray
     .map(StatFunctions.getDeserializedPairActivity)
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
     .flatMap(r => StatFunctions.getWindowValuesFromPairActivity(r, lookbacks.toList))
   )
-//recordValuesPerWindowDstream.print()
+eventValuesAllWindowsDstream.print()
 
 
-val statsDstreamList = (lookbacks.toList.map(lookback => {
-    recordValuesPerWindowDstream
+val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
+    eventValuesAllWindowsDstream
       .filter(r => r._1._2.equals(lookback.getWindowSec.toString))  // for each lookback process only items flatmapped for that
       .reduceByKeyAndWindow(                                        // key not mentioned
-        StatFunctions.addInsightFunc,                               // Adding elements in the new batches entering the window
-        StatFunctions.subInsightFunc,                               // Removing elements from the oldest batches exiting the window
+        StatFunctions.addEventToStats,                              // Adding elements in the new batches entering the window
+        StatFunctions.subtractEventsFromStats,                      // Removing elements from the oldest batches exiting the window
         Seconds(lookback.getWindowSec),                             // Window duration
         Seconds(lookback.getSlideIntervalSec)                       // Slide duration
       )
@@ -220,7 +222,7 @@ val statsDstreamList = (lookbacks.toList.map(lookback => {
 )
 
 // == OUTPUT ==
-statsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))
+windowStatsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))
 
 
 // == WATERMARKING ==
