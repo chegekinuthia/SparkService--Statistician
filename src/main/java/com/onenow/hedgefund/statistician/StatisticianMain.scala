@@ -221,6 +221,10 @@ val eventValuesAllWindowsDstream = (unionDstream
   )
 // eventValuesAllWindowsDstream.print()
 
+// PERFORMANCE EVALUATION
+// varying numTasks in reduceByKeyAndWindow
+// reduceByKeyAndWindow(func, windowLength, slideInterval, [numTasks])
+val numReduceTasks = 2;
 
 // Get the stats of each serie for every window
 val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
@@ -230,7 +234,8 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
         StatFunctions.addEventToStats,                              // Adding elements in the new batches entering the window
         StatFunctions.subtractEventsFromStats,                      // Removing elements from the oldest batches exiting the window
         Seconds(lookback.getWindowSec),                             // Window duration
-        Seconds(lookback.getSlideIntervalSec)                       // Slide duration
+        Seconds(lookback.getSlideIntervalSec),                      // Slide duration
+        numReduceTasks
       )
     }
   )
