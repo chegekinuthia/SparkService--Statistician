@@ -118,7 +118,7 @@ case object StatFunctions extends Serializable {
     kv._1.toString.equals(name)
   }
   // UNBUNDLE
-  // PairActivity -> ((serieName,sectorName,lookback) (d,d,d,d,d,d,d)) for every lookback window
+  // PairActivity -> ((serieName,sectorName,lookback) (d,d,d,d,d,d,d,d)) for every lookback window
   val getWindowValuesFromPairActivity = (event:PairActivity, lookbacks:List[TradingLookback]) => {
 
     val value = event.getStoredValue.toDouble   //PART 2: 1
@@ -128,9 +128,10 @@ case object StatFunctions extends Serializable {
     val variance = 0.0                          //PART 2: 5
     val deviation = 0.0                         //PART 2: 6
     val zScore = 0.0                            //PART 2: 7
+    val standardDeviationOverMean = 0.0         //PART 2: 8
 
     import scala.collection.mutable.ListBuffer
-    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Double,Double))]()
+    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))]()
 
     for(lookback <- lookbacks) {  // expand to one record per window
 
@@ -138,7 +139,8 @@ case object StatFunctions extends Serializable {
       val sectorName = event.getSectorName.toString     //PART 1: 2
       val windowSec = lookback.getWindowSec.toString    //PART 1: 3
 
-      val toAdd = ((serieName, sectorName, windowSec), (value, sum, count, mean, variance, deviation, zScore))
+      val toAdd = ((serieName, sectorName, windowSec),                                        //PART 1
+        (value, sum, count, mean, variance, deviation, zScore, standardDeviationOverMean))    //PART 2
 
       items += toAdd
     }
@@ -153,33 +155,39 @@ case object StatFunctions extends Serializable {
   // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
   //
   // on several (name, (value, count, mean, variance, deviation))
-  val addEventToStats = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
-                             current: (Double, Double, Double, Double, Double, Double, Double)) => {
+  val addEventToStats = (accumulator:(Double,Double,Double,Double,Double,Double,Double,Double),
+                             current:(Double,Double,Double,Double,Double,Double,Double,Double)) => {
     val value = current._1
     val valueTotal = accumulator._2 + current._2
     val countTotal = accumulator._3 + current._3
     val meanTodate = valueTotal / countTotal
     val currentScore = value - meanTodate
     val varianceTotal = accumulator._5 + currentScore * currentScore // sum of square scores
-    val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+    val standardDeviation = scala.math.sqrt(varianceTotal)
+    val currentZscore = currentScore / standardDeviation // score / standard deviation
+    val standardDeviationOverMean = standardDeviation / meanTodate
+
+    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, standardDeviationOverMean)
   }
-  val subtractEventsFromStats = (accumulator: (Double, Double, Double, Double, Double, Double, Double),
-                                     current: (Double, Double, Double, Double, Double, Double, Double)) => {
+  val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double,Double,Double,Double),
+                                     current:(Double,Double,Double,Double,Double,Double,Double,Double)) => {
     val value = current._1
     val valueTotal = accumulator._2 - current._2
     val countTotal = accumulator._3 - current._3
     val meanTodate = valueTotal / countTotal
     val currentScore = value - meanTodate
     val varianceTotal = accumulator._5 - currentScore * currentScore // sum of square scores
-    val currentZscore = currentScore / scala.math.sqrt(varianceTotal) // score / standard deviation
-    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+    val standardDeviation = scala.math.sqrt(varianceTotal)
+    val currentZscore = currentScore / standardDeviation // score / standard deviation
+    val standardDeviationOverMean = standardDeviation / meanTodate
+
+    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, standardDeviationOverMean)
   }
   // EMIT OUTPUT
-  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Double,Double))) => {
+  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))) => {
     println(entry)
   }
-  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Double,Double))]) => {
+  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))]) => {
     rdd.collect().foreach(emitStats)
   }
 }
@@ -214,6 +222,7 @@ val eventValuesAllWindowsDstream = (unionDstream
 // eventValuesAllWindowsDstream.print()
 
 
+// Get the stats of each serie for every window
 val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
     eventValuesAllWindowsDstream
       .filter(r => r._1._3.equals(lookback.getWindowSec.toString))  // for each lookback: process only items flatmapped for that window
@@ -226,6 +235,10 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
     }
   )
 )
+
+// Identify the serie in each sector that is most deviated (standard deviation as percent of mean), for each window
+//windowStatsDstreamList.map(stream =>
+//  )
 
 // == OUTPUT ==
 windowStatsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))
