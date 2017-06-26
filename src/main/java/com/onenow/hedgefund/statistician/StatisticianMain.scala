@@ -126,9 +126,10 @@ case object StatFunctions extends Serializable {
     val count = 1.0                             //PART 2: 3
     val mean = value / count                    //PART 2: 4
     val sumOfSquaredDeviations = 0.0            //PART 2: 5
+    val timeInMsec:Long = event.getTimeInMsec   //PART 2: 6
 
     import scala.collection.mutable.ListBuffer
-    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double))]()
+    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Long))]()
 
     for(lookback <- lookbacks) {  // expand to one record per window
 
@@ -136,8 +137,8 @@ case object StatFunctions extends Serializable {
       val sectorName = event.getSectorName.toString     //PART 1: 2
       val windowSec = lookback.getWindowSec.toString    //PART 1: 3
 
-      val toAdd = ((serieName, sectorName, windowSec),                          //PART 1
-        (value, sum, count, mean, sumOfSquaredDeviations))    //PART 2
+      val toAdd = ((serieName, sectorName, windowSec),                    //PART 1
+        (value, sum, count, mean, sumOfSquaredDeviations, timeInMsec))    //PART 2
 
       items += toAdd
     }
@@ -158,33 +159,43 @@ case object StatFunctions extends Serializable {
   //    val standardDeviation = scala.math.sqrt(variance)
   //    val currentZscore = currentDeviation / standardDeviation
   //    val opportunity = standardDeviation / meanTodate                 // an indication of % volatility
-  val addEventToStats = (accumulator:(Double,Double,Double,Double,Double),
-                             current:(Double,Double,Double,Double,Double)) => {
+  val addEventToStats = (accumulator:(Double,Double,Double,Double,Double,Long),
+                             current:(Double,Double,Double,Double,Double,Long)) => {
     val currentValue = current._1
     val valueTotal = accumulator._2 + current._2
     val countTotal = accumulator._3 + current._3
     val meanTodate = valueTotal / countTotal
     val currentDeviation = currentValue - meanTodate
     val sumOfSquaredDeviations = accumulator._5 + currentDeviation * currentDeviation
+    // time
+    var timeInMsec = accumulator._6
+    if(current._6>timeInMsec) {
+      timeInMsec = current._6
+    }
 
-    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations)
+    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations,timeInMsec)
   }
-  val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double),
-                                     current:(Double,Double,Double,Double,Double)) => {
+  val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double,Long),
+                                     current:(Double,Double,Double,Double,Double,Long)) => {
     val currentValue = current._1
     val valueTotal = accumulator._2 - current._2
     val countTotal = accumulator._3 - current._3
     val meanTodate = valueTotal / countTotal
     val currentDeviation = currentValue - meanTodate
     val sumOfSquaredDeviations = accumulator._5 - currentDeviation * currentDeviation
+    // time
+    var timeInMsec = accumulator._6
+    if(current._6>timeInMsec) {
+      timeInMsec = current._6
+    }
 
-    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations)
+    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations, timeInMsec)
   }
   // EMIT OUTPUT
-  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double))) => {
+  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Long))) => {
     println(entry)
   }
-  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double))]) => {
+  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Long))]) => {
     rdd.collect().foreach(emitStats)
   }
 }
