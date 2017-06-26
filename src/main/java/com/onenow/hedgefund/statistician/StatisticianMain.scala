@@ -125,13 +125,10 @@ case object StatFunctions extends Serializable {
     val sum = value                             //PART 2: 2
     val count = 1.0                             //PART 2: 3
     val mean = value / count                    //PART 2: 4
-    val variance = 0.0                          //PART 2: 5
-    val deviation = 0.0                         //PART 2: 6
-    val zScore = 0.0                            //PART 2: 7
-    val opportunity = 0.0                       //PART 2: 8
+    val sumOfSquaredDeviations = 0.0            //PART 2: 5
 
     import scala.collection.mutable.ListBuffer
-    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))]()
+    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double))]()
 
     for(lookback <- lookbacks) {  // expand to one record per window
 
@@ -140,7 +137,7 @@ case object StatFunctions extends Serializable {
       val windowSec = lookback.getWindowSec.toString    //PART 1: 3
 
       val toAdd = ((serieName, sectorName, windowSec),                          //PART 1
-        (value, sum, count, mean, variance, deviation, zScore, opportunity))    //PART 2
+        (value, sum, count, mean, sumOfSquaredDeviations))    //PART 2
 
       items += toAdd
     }
@@ -154,42 +151,40 @@ case object StatFunctions extends Serializable {
   // https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
   // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
   //
-  // on several (name, (value, count, mean, variance, deviation))
-  val addEventToStats = (accumulator:(Double,Double,Double,Double,Double,Double,Double,Double),
-                             current:(Double,Double,Double,Double,Double,Double,Double,Double)) => {
+
+  // UNBIASED STATISTICS: https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
+  // NOTE: the receiver of the output of these methods will perform addtional math:
+  //    val variance = sumOfSquaredDeviations/(countTotal-1)
+  //    val standardDeviation = scala.math.sqrt(variance)
+  //    val currentZscore = currentDeviation / standardDeviation
+  //    val opportunity = standardDeviation / meanTodate                 // an indication of % volatility
+  val addEventToStats = (accumulator:(Double,Double,Double,Double,Double),
+                             current:(Double,Double,Double,Double,Double)) => {
     val currentValue = current._1
     val valueTotal = accumulator._2 + current._2
     val countTotal = accumulator._3 + current._3
     val meanTodate = valueTotal / countTotal
     val currentDeviation = currentValue - meanTodate
     val sumOfSquaredDeviations = accumulator._5 + currentDeviation * currentDeviation
-    val variance = sumOfSquaredDeviations/(countTotal-1) // NOTE https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
-    val standardDeviation = scala.math.sqrt(variance)
-    val currentZscore = currentDeviation / standardDeviation
-    val opportunity = standardDeviation / meanTodate                 // an indication of % volatility
 
-    (currentValue, valueTotal, countTotal, meanTodate, currentDeviation, variance, currentZscore, opportunity)
+    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations)
   }
-  val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double,Double,Double,Double),
-                                     current:(Double,Double,Double,Double,Double,Double,Double,Double)) => {
-    val value = current._1
+  val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double),
+                                     current:(Double,Double,Double,Double,Double)) => {
+    val currentValue = current._1
     val valueTotal = accumulator._2 - current._2
     val countTotal = accumulator._3 - current._3
     val meanTodate = valueTotal / countTotal
-    val currentDeviation = value - meanTodate
+    val currentDeviation = currentValue - meanTodate
     val sumOfSquaredDeviations = accumulator._5 - currentDeviation * currentDeviation
-    val variance = sumOfSquaredDeviations/(countTotal-1)  // NOTE https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
-    val standardDeviation = scala.math.sqrt(variance)
-    val currentZscore = currentDeviation / standardDeviation              // an indication of % volatility
-    val opportunity = standardDeviation / meanTodate
 
-    (value, valueTotal, countTotal, meanTodate, currentDeviation, variance, currentZscore, opportunity)
+    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations)
   }
   // EMIT OUTPUT
-  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))) => {
+  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double))) => {
     println(entry)
   }
-  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))]) => {
+  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double))]) => {
     rdd.collect().foreach(emitStats)
   }
 }
@@ -242,6 +237,10 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
     }
   )
 )
+
+
+// VARIANCE, COVARIANCE, CORRELATION
+
 
 // == OUTPUT ==
 windowStatsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))  // statistics
