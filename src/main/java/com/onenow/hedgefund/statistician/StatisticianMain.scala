@@ -201,6 +201,14 @@ case object StatFunctions extends Serializable {
     try {
       println(entry)
 
+      // TODO:
+      // Register a temp table at every batch interval so that it can be queried separately
+      // ctr.window(Duration(60000)).foreachRDD { rdd =>
+      //   val sqlContext = SQLContext.getOrCreate(SparkContext.getOrCreate())
+      //  sqlContext.createDataFrame(rdd).toDF("adId", "clicks", "impressions", "CTR", "Time").registerTempTable("ctr")
+      //  rdd.take(1)
+      // }
+
     } catch {
       case e: Exception => // e.printStackTrace()
     }
