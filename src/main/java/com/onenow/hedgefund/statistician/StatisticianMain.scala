@@ -157,17 +157,18 @@ case object StatFunctions extends Serializable {
   // on several (name, (value, count, mean, variance, deviation))
   val addEventToStats = (accumulator:(Double,Double,Double,Double,Double,Double,Double,Double),
                              current:(Double,Double,Double,Double,Double,Double,Double,Double)) => {
-    val value = current._1
+    val currentValue = current._1
     val valueTotal = accumulator._2 + current._2
     val countTotal = accumulator._3 + current._3
     val meanTodate = valueTotal / countTotal
-    val currentScore = value - meanTodate
-    val varianceTotal = accumulator._5 + currentScore * currentScore // sum of square scores
-    val standardDeviation = scala.math.sqrt(varianceTotal)
-    val currentZscore = currentScore / standardDeviation
+    val currentDeviation = currentValue - meanTodate
+    val sumOfSquaredDeviations = accumulator._5 + currentDeviation * currentDeviation
+    val variance = sumOfSquaredDeviations/(countTotal-1) // NOTE https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
+    val standardDeviation = scala.math.sqrt(variance)
+    val currentZscore = currentDeviation / standardDeviation
     val opportunity = standardDeviation / meanTodate                 // an indication of % volatility
 
-    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, opportunity)
+    (currentValue, valueTotal, countTotal, meanTodate, currentDeviation, variance, currentZscore, opportunity)
   }
   val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double,Double,Double,Double),
                                      current:(Double,Double,Double,Double,Double,Double,Double,Double)) => {
@@ -175,13 +176,14 @@ case object StatFunctions extends Serializable {
     val valueTotal = accumulator._2 - current._2
     val countTotal = accumulator._3 - current._3
     val meanTodate = valueTotal / countTotal
-    val currentScore = value - meanTodate
-    val varianceTotal = accumulator._5 - currentScore * currentScore  // sum of square scores
-    val standardDeviation = scala.math.sqrt(varianceTotal)
-    val currentZscore = currentScore / standardDeviation              // an indication of % volatility
+    val currentDeviation = value - meanTodate
+    val sumOfSquaredDeviations = accumulator._5 - currentDeviation * currentDeviation
+    val variance = sumOfSquaredDeviations/(countTotal-1)  // NOTE https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
+    val standardDeviation = scala.math.sqrt(variance)
+    val currentZscore = currentDeviation / standardDeviation              // an indication of % volatility
     val opportunity = standardDeviation / meanTodate
 
-    (value, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore, opportunity)
+    (value, valueTotal, countTotal, meanTodate, currentDeviation, variance, currentZscore, opportunity)
   }
   // EMIT OUTPUT
   val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Double,Double,Double))) => {
