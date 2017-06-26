@@ -152,19 +152,14 @@ case object StatFunctions extends Serializable {
   // https://stackoverflow.com/questions/28147566/custom-function-inside-reducebykey-in-spark
   // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
   //
-
-  // UNBIASED STATISTICS: https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
-  // NOTE: the receiver of the output of these methods will perform addtional math:
-  //    val variance = sumOfSquaredDeviations/(countTotal-1)
-  //    val standardDeviation = scala.math.sqrt(variance)
-  //    val currentZscore = currentDeviation / standardDeviation
-  //    val opportunity = standardDeviation / meanTodate                 // an indication of % volatility
+  // associative calculations in ReduceByKeyAndWindow
   val addEventToStats = (accumulator:(Double,Double,Double,Double,Double,Long),
                              current:(Double,Double,Double,Double,Double,Long)) => {
     val currentValue = current._1
     val valueTotal = accumulator._2 + current._2
+    // stats
     val countTotal = accumulator._3 + current._3
-    val meanTodate = valueTotal / countTotal
+    val meanTodate = valueTotal / countTotal            // for easy visual inspection
     val currentDeviation = currentValue - meanTodate
     val sumOfSquaredDeviations = accumulator._5 + currentDeviation * currentDeviation
     // time
@@ -179,8 +174,9 @@ case object StatFunctions extends Serializable {
                                      current:(Double,Double,Double,Double,Double,Long)) => {
     val currentValue = current._1
     val valueTotal = accumulator._2 - current._2
+    // stats
     val countTotal = accumulator._3 - current._3
-    val meanTodate = valueTotal / countTotal
+    val meanTodate = valueTotal / countTotal          // for easy visual inspection
     val currentDeviation = currentValue - meanTodate
     val sumOfSquaredDeviations = accumulator._5 - currentDeviation * currentDeviation
     // time
@@ -250,12 +246,57 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
 )
 
 
-// VARIANCE, COVARIANCE, CORRELATION
+// == STREAMING JOIN ==
+// VARIANCE, COVARIANCE, CORRELATION: study the relationship of any two streams
+// UNBIASED STATISTICS: https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
+
+import scala.collection.mutable.ListBuffer
+val windowCoStatsList = ListBuffer[((String,String,String),(Double,Double,Long))]()
+
+for(stream1 <- windowStatsDstreamList) {    // 1
+  for(stream2 <- windowStatsDstreamList) {  // 2
+
+    stream1.join(stream2).map(joined => {
+      // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
+      // When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W))
+
+      // variance = sumOfSquaredDeviations/(countTotal-1)
+      val variance1 = joined._2._1._5 / (joined._2._1._3 - 1)
+      val variance2 = joined._2._2._5 / (joined._2._2._3 - 1)
+
+      val coVariance1to2 = variance1 * variance2                                  // [unit1*unit2]
+
+      //    val standardDeviation = scala.math.sqrt(variance)
+      val standardDeviation1 = scala.math.sqrt(variance1)
+      val standardDeviation2 = scala.math.sqrt(variance2)
+
+      val coRelation1to2 = coVariance1to2 / standardDeviation1 / standardDeviation2   // [no unit]
+
+      // time
+      val timeInMsec1 = joined._2._1._6
+      val timeInMsec2 = joined._2._2._6
+      var timeInMSec1to2 = timeInMsec1
+      if(timeInMsec2>timeInMSec1to2) {
+        timeInMSec1to2 = timeInMsec2
+      }
+
+      val summaryToAdd = (joined._1, (coVariance1to2, coRelation1to2, timeInMSec1to2))
+
+      windowCoStatsList += summaryToAdd
+    }
+    )
+  }
+}
+
+
+// TODO: receiver math
+//    val currentZscore = currentDeviation / standardDeviation
+//    val opportunity = standardDeviation / meanTodate                 // an indication of % volatility
 
 
 // == OUTPUT ==
 windowStatsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))  // statistics
-
+windowCoStatsList.map(coStat => println(coStat))
 
 // == WATERMARKING ==
 // TODO: https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html
