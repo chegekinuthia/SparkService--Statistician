@@ -20,7 +20,7 @@ datumSource is the provider of the data, datumType is the type of fata, datumTim
 
 ## Sample Output 
 
-### Streaming stats
+### Streaming Stats
 
 ((SPY-STOCK-TRADED-SPY-STOCK-ASK,DOWJONES,600),(2683.45,268360.2599999996,100.0,2683.602599999996,2.7028083560741143,1496676733178))
 
@@ -29,7 +29,7 @@ datumSource is the provider of the data, datumType is the type of fata, datumTim
 #### Where
 ((serieName, sectorName, windowSizeSeconds), (lastValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations, timeInMsec)
 
-### Streaming co-stats
+### Streaming Co-Stats
 
 ((SPY-STOCK-TRADED-SPY-STOCK-ASK,DOWJONES,300),(2.793792030784414E-4,0.016714640381367506,1496676634981))
 
@@ -39,9 +39,9 @@ datumSource is the provider of the data, datumType is the type of fata, datumTim
 ((serieName, sectorName, windowSizeSeconds), (coVariance1to2, coRelation1to2, timeInMSec1to2)
 
 
-### Run on Spark shell
+### Run on Spark Shell
 
-#### On Spark shell
+#### On Spark Shell
 
 cd resources
 
