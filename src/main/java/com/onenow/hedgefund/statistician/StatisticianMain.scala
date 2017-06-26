@@ -188,11 +188,29 @@ case object StatFunctions extends Serializable {
     (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations, timeInMsec)
   }
   // EMIT OUTPUT
+  // Emit Row
   val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Long))) => {
-    println(entry)
+    try {
+      println(entry)
+
+    } catch {
+      case e: Exception => // e.printStackTrace()
+    }
   }
-  val emitRddStats = (rdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Long))]) => {
-    rdd.collect().foreach(emitStats)
+  val emitCoStats = (entry: ((String,String,String),(Double,Double,Long))) => {
+    try {
+      println(entry)
+
+    } catch {
+      case e: Exception => // e.printStackTrace()
+    }
+  }
+  // Emit RDD
+  val emitRddStats = (statRdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Long))]) => {
+    statRdd.collect().foreach(emitStats)
+  }
+  val emitRddCoStats = (coStatRdd: RDD[((String,String,String),(Double,Double,Long))]) => {
+    coStatRdd.collect().foreach(emitCoStats)
   }
 }
 
@@ -251,12 +269,14 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
 // UNBIASED STATISTICS: https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
 
 import scala.collection.mutable.ListBuffer
-val windowCoStatsList = ListBuffer[((String,String,String),(Double,Double,Long))]()
+@transient
+val windowCoStatsDstreamList = ListBuffer[DStream[((String,String,String),(Double,Double,Long))]]()
 
 for(stream1 <- windowStatsDstreamList) {    // 1
   for(stream2 <- windowStatsDstreamList) {  // 2
 
-    stream1.join(stream2).map(joined => {
+    // Some of the DStreams have different slide durations
+    val joinDstream = stream1.join(stream2).map(joined => {
       // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
       // When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W))
 
@@ -282,9 +302,11 @@ for(stream1 <- windowStatsDstreamList) {    // 1
 
       val summaryToAdd = (joined._1, (coVariance1to2, coRelation1to2, timeInMSec1to2))
 
-      windowCoStatsList += summaryToAdd
+      summaryToAdd
     }
     )
+
+    windowCoStatsDstreamList += joinDstream
   }
 }
 
@@ -295,8 +317,9 @@ for(stream1 <- windowStatsDstreamList) {    // 1
 
 
 // == OUTPUT ==
-windowStatsDstreamList.map(stream => stream.foreachRDD(StatFunctions.emitRddStats))  // statistics
-windowCoStatsList.map(coStat => println(coStat))
+windowStatsDstreamList.map(statStream => statStream.foreachRDD(StatFunctions.emitRddStats))  // statistics
+windowCoStatsDstreamList.map(coStatStream => coStatStream.foreachRDD(StatFunctions.emitRddCoStats))
+
 
 // == WATERMARKING ==
 // TODO: https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html
