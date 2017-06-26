@@ -1,6 +1,6 @@
 # SparkService--Statistician
 
-This service computes streaming summary statistics: mean, deviation, zScore, variance, standard deviation.
+This service computes streaming summary statistics: e.g. mean, deviation, zScore, variance, standard deviation.
 
 It does so for any number of input time series.
 
@@ -17,16 +17,23 @@ Then, it joins the output d-streams to also emit: covariance, correlation.
 #### Where
 datumSource is the provider of the data, datumType is the type of fata, datumTiming is the timing nature of the data, serieName is the name of the series, storedValue, sectorName is the value, timeInMsec is the time stamp.
 
-## Sample Output
+## Sample Output 
 
 ### Streaming stats
 
-#### ((SPY-STOCK-TRADED-DIA-STOCK-TRADED,DOWJONES,3600),(2683.0100399999997,6449830.09722,2403.0,2684.074114531835,-1.0640745318355584,0.3801410763216977,-1.7258364957615677))
-#### ((SPY-STOCK-TRADED-SPXU-STOCK-TRADED,DOWJONES,86400),(2683.1099999999997,6449944.32,2403.0,2684.121647940075,-1.0116479400753633,0.22321927262659114,-2.1412311721498805))
-#### ((SPY-STOCK-TRADED-DIA-STOCK-TRADED,DOWJONES,3600),(2683.0099999999998,6449706.320000002,2403.0,2684.022605076988,-1.0126050769881658,0.22371627469373934,-2.1408750016946074))
+((SPY-STOCK-TRADED-SPY-STOCK-ASK,DOWJONES,600),(2683.45,268360.2599999996,100.0,2683.602599999996,2.7028083560741143,1496676733178))
+((SPY-STOCK-TRADED-SPY-STOCK-BID,DOWJONES,600),(2683.35,268350.3600000004,100.0,2683.503600000004,2.7470825191227606,1496676733178))
 
 #### Where
-((serieName, sectorName, windowSizeSeconds), (lastValue, valueTotal, countTotal, meanTodate, currentScore, varianceTotal, currentZscore)
+((serieName, sectorName, windowSizeSeconds), (lastValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations, timeInMsec)
+
+### Streaming co-stats
+
+((SPY-STOCK-TRADED-SPY-STOCK-ASK,DOWJONES,300),(2.793792030784414E-4,0.016714640381367506,1496676634981))
+((SPY-STOCK-TRADED-SPY-STOCK-MARK_PRICE,DOWJONES,300),(3.0124111941445694E-4,0.01735629912782264,1496676634981))
+
+#### Where
+((serieName, sectorName, windowSizeSeconds), (coVariance1to2, coRelation1to2, timeInMSec1to2)
 
 
 ### Run on Spark shell
