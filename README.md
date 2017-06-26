@@ -11,8 +11,8 @@ Then, it joins the output d-streams to also emit: covariance, correlation.
 
 ## Sample Input
 
-#### {"datumSource": "IB", "datumType": "SIZE", "datumTiming": "STREAMING", "serieName": "SPY-STOCK-TRADED-DIA-STOCK-TRADED", "storedValue": "39.0", "sectorName": "DOWJONES", "timeInMsec": 1496674824867} 
-#### {"datumSource": "IB", "datumType": "SIZE", "datumTiming": "STREAMING", "serieName": "SPY-STOCK-TRADED-SPXU-STOCK-TRADED", "storedValue": "285.0", "sectorName": "DOWJONES","timeInMsec": 1496674824877} 
+{"datumSource": "IB", "datumType": "SIZE", "datumTiming": "STREAMING", "serieName": "SPY-STOCK-TRADED-DIA-STOCK-TRADED", "storedValue": "39.0", "sectorName": "DOWJONES", "timeInMsec": 1496674824867} 
+{"datumSource": "IB", "datumType": "SIZE", "datumTiming": "STREAMING", "serieName": "SPY-STOCK-TRADED-SPXU-STOCK-TRADED", "storedValue": "285.0", "sectorName": "DOWJONES","timeInMsec": 1496674824877} 
 
 #### Where
 datumSource is the provider of the data, datumType is the type of fata, datumTiming is the timing nature of the data, serieName is the name of the series, storedValue, sectorName is the value, timeInMsec is the time stamp.
