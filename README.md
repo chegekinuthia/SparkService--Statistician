@@ -1,10 +1,13 @@
 # SparkService--Statistician
 
-This service computes streaming summary statistics, including: mean, variance, score, zScore .
+This service computes streaming summary statistics: mean, deviation, zScore, variance, standard deviation.
 
 It does so for any number of input time series.
 
 And across any number of time windows.
+
+Then, it joins the output d-streams to also emit: covariance, correlation.
+ 
 
 ## Sample Input
 
