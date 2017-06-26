@@ -284,7 +284,7 @@ for(stream1 <- windowStatsDstreamList) {    // 1
   for(stream2 <- windowStatsDstreamList) {  // 2
 
     // Some of the DStreams have different slide durations
-    val joinDstream = stream1.join(stream2).map(joined => {
+    var joinDstream = stream1.join(stream2).map(joined => {
       // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
       // When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W))
 

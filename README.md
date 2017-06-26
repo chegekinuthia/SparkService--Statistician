@@ -36,7 +36,7 @@ datumSource is the provider of the data, datumType is the type of fata, datumTim
 ((SPY-STOCK-TRADED-SPY-STOCK-MARK_PRICE,DOWJONES,300),(3.0124111941445694E-4,0.01735629912782264,1496676634981))
 
 #### Where
-((serieName, sectorName, windowSizeSeconds), (coVariance1to2, coRelation1to2, timeInMSec1to2)
+((serieName, sectorName, windowSizeSeconds), (coVariance1to2, coRrelation1to2, timeInMSec1to2)
 
 
 ### Run on Spark Shell
