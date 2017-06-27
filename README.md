@@ -27,16 +27,17 @@ datumSource is the provider of the data, datumType is the type of fata, datumTim
 ((SPY-STOCK-TRADED-SPY-STOCK-BID,DOWJONES,600),(2683.35,268350.3600000004,100.0,2683.503600000004,2.7470825191227606,1496676733178))
 
 #### Where
-((serieName, sectorName, windowSizeSeconds), (lastValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations, timeInMsec)
+((serieName, sectorName, windowSizeSeconds, windowSlideSec), (lastValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations, timeInMsec)
 
 ### Streaming Co-Stats
 
-((SPY-STOCK-TRADED-SPY-STOCK-ASK,DOWJONES,300),(2.793792030784414E-4,0.016714640381367506,1496676634981))
+((SPY-STOCK-TRADED-SPY-STOCK-MARK_PRICE,SPY-STOCK-TRADED-SPY-STOCK-BID,300,25),(0.003401936038715627,0.05832611798084652,1496676066587))
 
-((SPY-STOCK-TRADED-SPY-STOCK-MARK_PRICE,DOWJONES,300),(3.0124111941445694E-4,0.01735629912782264,1496676634981))
+((SPY-STOCK-TRADED-SPY-STOCK-MARK_PRICE,SPY-STOCK-TRADED-SPY-STOCK-MARK_PRICE,300,25),(0.003335905416254516,0.057757297515158346,1496676066587))
 
 #### Where
-((serieName, sectorName, windowSizeSeconds), (coVariance1to2, coRrelation1to2, timeInMSec1to2)
+
+((serie1Name, serie2Name, windowSizeSeconds, windowSlideSec), (coVariance1to2, coRrelation1to2, timeInMSec1to2)
 
 
 ### Run on Spark Shell

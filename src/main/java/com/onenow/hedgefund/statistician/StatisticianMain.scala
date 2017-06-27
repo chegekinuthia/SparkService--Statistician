@@ -283,7 +283,7 @@ val windowCoStatsDstreamJoinList = ListBuffer[DStream[((String,String),(Double,D
 for(stream <- windowStatsDstreamList) {
   val windowDstreamToJoin = stream.transform(rdd => {
     rdd.map(item=> {
-      val key = (item._1._3, item._1._4) // (window,slide)
+      val key = (item._1._3, item._1._4) // (window,slide) removed serieName from key to make joins possible
       val value = (item._2._1, item._2._2, item._2._3, item._2._4, item._2._5, item._2._6, item._1._1) // (d,d,d,d,d,d,l,serieName) added serieName
       (key,value)
     })
