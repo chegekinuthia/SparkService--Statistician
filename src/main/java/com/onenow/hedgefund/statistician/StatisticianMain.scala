@@ -273,16 +273,21 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
 )
 // NOTE: reduce(func) to Return a new DStream of single-element RDDs
 
+
 // == BEFORE JOIN, TRANSFORM STREAM
+// for the join two dstream have to have the same key... (k,v1).join(k,v2)
 import scala.collection.mutable.ListBuffer
 
-val windowCoStatsDstreamJoinList = ListBuffer[DStream[(String,((Double,Double,Double,Double,Double,Long),String))]]()
+val windowCoStatsDstreamJoinList = ListBuffer[DStream[((String,String),(Double,Double,Double,Double,Double,Long,String))]]()
 
 for(stream <- windowStatsDstreamList) {
   val windowDstreamToJoin = stream.transform(rdd => {
-    rdd.map(item=>((item._1._3),(item._2, item._1._1)))   // tuple that only has key=window, and value=(unchanged,serieName)
-  }
-  )
+    rdd.map(item=> {
+      val key = (item._1._3, item._1._4) // (window,slide)
+      val value = (item._2._1, item._2._2, item._2._3, item._2._4, item._2._5, item._2._6, item._1._1) // (d,d,d,d,d,d,l,serieName) added serieName
+      (key,value)
+    })
+  })
   windowCoStatsDstreamJoinList += windowDstreamToJoin
 }
 
@@ -294,9 +299,9 @@ for(stream <- windowStatsDstreamList) {
 @transient
 val windowCoStatsDstreamList = ListBuffer[DStream[((String,String,String,String),(Double,Double,Long))]]()
 
-for(stream1 <- windowStatsDstreamList) {    // 1
+for(stream1 <- windowCoStatsDstreamJoinList) {    // 1
 
-  for(stream2 <- windowStatsDstreamList) {  // 2
+  for(stream2 <- windowCoStatsDstreamJoinList) {  // 2
 
     // Some of the DStreams have different slide durations
     var joinDstream = stream1.join(stream2).map(joined => {
@@ -323,7 +328,11 @@ for(stream1 <- windowStatsDstreamList) {    // 1
         timeInMSec1to2 = timeInMsec2
       }
 
-      val summaryToAdd = (joined._1, (coVariance1to2, coRelation1to2, timeInMSec1to2))
+      // build
+      val key = (joined._2._1._7, joined._2._2._7, joined._1._1, joined._1._2) // (serie1Name,Serie2Name,window,slide)
+      val value = (coVariance1to2, coRelation1to2, timeInMSec1to2)
+
+      val summaryToAdd = (key,value)
 
       summaryToAdd
     }
