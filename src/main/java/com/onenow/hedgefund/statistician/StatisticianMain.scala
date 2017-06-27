@@ -248,7 +248,7 @@ val eventValuesAllWindowsDstream = (unionDstream
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
     .flatMap(r => StatFunctions.getWindowValuesFromPairActivity(r, lookbacks.toList))
-  )
+  ).cache()
 // eventValuesAllWindowsDstream.print()
 
 // PERFORMANCE EVALUATION
@@ -267,20 +267,37 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
         Seconds(lookback.getSlideIntervalSec),                      // Slide duration
         numReduceTasks
       )
-    }
+    }.cache()
   )
 )
+// NOTE: reduce(func) to Return a new DStream of single-element RDDs
+
+// == BEFORE JOIN, TRANSFORM STREAM
+import scala.collection.mutable.ListBuffer
+
+val windowCoStatsDstreamJoinList = ListBuffer[DStream[(String,((Double,Double,Double,Double,Double,Long),String))]]()
+
+for(stream <- windowStatsDstreamList) {
+
+  val windowDstreamToJoin = stream.transform(rdd => {
+    rdd.map(item=>((item._1._3),(item._2, item._1._1)))   // tuple that only has key=window, and value=(unchanged,serieName)
+  }
+  )
+
+  windowCoStatsDstreamJoinList += windowDstreamToJoin
+
+}
 
 
 // == STREAMING JOIN ==
 // VARIANCE, COVARIANCE, CORRELATION: study the relationship of any two streams
 // UNBIASED STATISTICS: https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
 
-import scala.collection.mutable.ListBuffer
 @transient
 val windowCoStatsDstreamList = ListBuffer[DStream[((String,String,String),(Double,Double,Long))]]()
 
 for(stream1 <- windowStatsDstreamList) {    // 1
+
   for(stream2 <- windowStatsDstreamList) {  // 2
 
     // Some of the DStreams have different slide durations
