@@ -125,11 +125,12 @@ case object StatFunctions extends Serializable {
     val sum = value                             //PART 2: 2
     val count = 1.0                             //PART 2: 3
     val mean = value / count                    //PART 2: 4
-    val sumOfSquaredDeviations = 0.0            //PART 2: 5
-    val timeInMsec:Long = event.getTimeInMsec   //PART 2: 6
+    val deviation = 0.0                         //PART 2: 5
+    val sumOfSquaredDeviations = 0.0            //PART 2: 6
+    val timeInMsec:Long = event.getTimeInMsec   //PART 2: 7
 
     import scala.collection.mutable.ListBuffer
-    val items = ListBuffer[((String,String,String,String),(Double,Double,Double,Double,Double,Long))]()
+    val items = ListBuffer[((String,String,String,String),(Double,Double,Double,Double,Double,Double,Long))]()
 
     for(lookback <- lookbacks) {  // expand to one record per window
 
@@ -138,8 +139,8 @@ case object StatFunctions extends Serializable {
       val windowSec = lookback.getWindowSec.toString        //PART 1: 3
       val slideSec = lookback.getSlideIntervalSec.toString  //PART 1: 4
 
-      val toAdd = ((serieName, sectorName, windowSec, slideSec),          //PART 1
-        (value, sum, count, mean, sumOfSquaredDeviations, timeInMsec))    //PART 2
+      val toAdd = ((serieName, sectorName, windowSec, slideSec),                      //PART 1
+        (value, sum, count, mean, deviation, sumOfSquaredDeviations, timeInMsec))     //PART 2
 
       items += toAdd
     }
@@ -154,43 +155,43 @@ case object StatFunctions extends Serializable {
   // sort rdd https://stackoverflow.com/questions/32988536/spark-dstream-sort-and-take-n-elements
   //
   // associative calculations in ReduceByKeyAndWindow
-  val addEventToStats = (accumulator:(Double,Double,Double,Double,Double,Long),
-                             current:(Double,Double,Double,Double,Double,Long)) => {
+  val addEventToStats = (accumulator:(Double,Double,Double,Double,Double,Double,Long),
+                             current:(Double,Double,Double,Double,Double,Double,Long)) => {
     val currentValue = current._1
     val valueTotal = accumulator._2 + current._2
     // stats
     val countTotal = accumulator._3 + current._3
     val meanTodate = valueTotal / countTotal            // for easy visual inspection
     val currentDeviation = currentValue - meanTodate
-    val sumOfSquaredDeviations = accumulator._5 + currentDeviation * currentDeviation
+    val sumOfSquaredDeviations = accumulator._6 + currentDeviation * currentDeviation
     // time
-    var timeInMsec = accumulator._6
-    if(current._6>timeInMsec) {
-      timeInMsec = current._6
+    var timeInMsec = accumulator._7
+    if(current._7>timeInMsec) {
+      timeInMsec = current._7
     }
 
-    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations,timeInMsec)
+    (currentValue, valueTotal, countTotal, meanTodate, currentDeviation, sumOfSquaredDeviations,timeInMsec)
   }
-  val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double,Long),
-                                     current:(Double,Double,Double,Double,Double,Long)) => {
+  val subtractEventsFromStats = (accumulator:(Double,Double,Double,Double,Double,Double,Long),
+                                     current:(Double,Double,Double,Double,Double,Double,Long)) => {
     val currentValue = current._1
     val valueTotal = accumulator._2 - current._2
     // stats
     val countTotal = accumulator._3 - current._3
     val meanTodate = valueTotal / countTotal          // for easy visual inspection
     val currentDeviation = currentValue - meanTodate
-    val sumOfSquaredDeviations = accumulator._5 - currentDeviation * currentDeviation
+    val sumOfSquaredDeviations = accumulator._6 - currentDeviation * currentDeviation
     // time
-    var timeInMsec = accumulator._6
-    if(current._6>timeInMsec) {
-      timeInMsec = current._6
+    var timeInMsec = accumulator._7
+    if(current._7>timeInMsec) {
+      timeInMsec = current._7
     }
 
-    (currentValue, valueTotal, countTotal, meanTodate, sumOfSquaredDeviations, timeInMsec)
+    (currentValue, valueTotal, countTotal, meanTodate, currentDeviation, sumOfSquaredDeviations, timeInMsec)
   }
   // EMIT OUTPUT
   // Emit Row
-  val emitStats = (entry: ((String,String,String,String),(Double,Double,Double,Double,Double,Long))) => {
+  val emitStats = (entry: ((String,String,String,String),(Double,Double,Double,Double,Double,Double,Long))) => {
     try {
       println(entry)
 
@@ -215,7 +216,7 @@ case object StatFunctions extends Serializable {
     }
   }
   // Emit RDD
-  val emitRddStats = (statRdd: RDD[((String,String,String,String),(Double,Double,Double,Double,Double,Long))]) => {
+  val emitRddStats = (statRdd: RDD[((String,String,String,String),(Double,Double,Double,Double,Double,Double,Long))]) => {
     statRdd.collect().foreach(emitStats)
   }
   val emitRddCoStats = (coStatRdd: RDD[((String,String,String,String),(Double,Double,Long))]) => {
@@ -278,13 +279,13 @@ val windowStatsDstreamList = (lookbacks.toList.map(lookback => {
 // for the join two dstream have to have the same key... (k,v1).join(k,v2)
 import scala.collection.mutable.ListBuffer
 
-val windowCoStatsDstreamJoinList = ListBuffer[DStream[((String,String),(Double,Double,Double,Double,Double,Long,String))]]()
+val windowCoStatsDstreamJoinList = ListBuffer[DStream[((String,String),(Double,Double,Double,Double,Double,Double,Long,String))]]()
 
 for(stream <- windowStatsDstreamList) {
   val windowDstreamToJoin = stream.transform(rdd => {
     rdd.map(item=> {
       val key = (item._1._3, item._1._4) // (window,slide) removed serieName from key to make joins possible
-      val value = (item._2._1, item._2._2, item._2._3, item._2._4, item._2._5, item._2._6, item._1._1) // (d,d,d,d,d,d,l,serieName) added serieName
+      val value = (item._2._1, item._2._2, item._2._3, item._2._4, item._2._5, item._2._6, item._2._7, item._1._1) // (d,d,d,d,d,d,l,serieName) added serieName
       (key,value)
     })
   })
@@ -308,29 +309,25 @@ for(stream1 <- windowCoStatsDstreamJoinList) {    // 1
       // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/13%20Joining%20DStreams.html
       // When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W))
 
-      // variance = sumOfSquaredDeviations/(countTotal-1)
-      val variance1 = joined._2._1._5 / (joined._2._1._3 - 1)
-      val variance2 = joined._2._2._5 / (joined._2._2._3 - 1)
+      val standardDeviation1 = scala.math.sqrt(joined._2._1._6/(joined._2._1._3-1))          // sumOfSquaredDeviations/(n-1)
+      val standardDeviation2 = scala.math.sqrt(joined._2._2._6/(joined._2._2._3-1))
 
-      val coVariance1to2 = variance1 * variance2                                  // [unit1*unit2]
+      // [standard definition] variance = sumOfDeviationProducts(1,2)/(countTotal-1)
+      val instantCoVariance1to2 = joined._2._1._5 * joined._2._2._5                           // [unit1*unit2], product of deviations
 
-      //    val standardDeviation = scala.math.sqrt(variance)
-      val standardDeviation1 = scala.math.sqrt(variance1)
-      val standardDeviation2 = scala.math.sqrt(variance2)
-
-      val coRelation1to2 = coVariance1to2 / standardDeviation1 / standardDeviation2   // [no unit]
+      val coRrelation1to2 = instantCoVariance1to2 / standardDeviation1 / standardDeviation2    // [no unit]
 
       // time
-      val timeInMsec1 = joined._2._1._6
-      val timeInMsec2 = joined._2._2._6
+      val timeInMsec1 = joined._2._1._7
+      val timeInMsec2 = joined._2._2._7
       var timeInMSec1to2 = timeInMsec1
       if(timeInMsec2>timeInMSec1to2) {
         timeInMSec1to2 = timeInMsec2
       }
 
       // build
-      val key = (joined._2._1._7, joined._2._2._7, joined._1._1, joined._1._2) // (serie1Name,Serie2Name,window,slide)
-      val value = (coVariance1to2, coRelation1to2, timeInMSec1to2)
+      val key = (joined._2._1._8, joined._2._2._8, joined._1._1, joined._1._2) // (serie1Name,Serie2Name,window,slide)
+      val value = (instantCoVariance1to2, coRrelation1to2, timeInMSec1to2)
 
       val summaryToAdd = (key,value)
 
