@@ -129,15 +129,16 @@ case object StatFunctions extends Serializable {
     val timeInMsec:Long = event.getTimeInMsec   //PART 2: 6
 
     import scala.collection.mutable.ListBuffer
-    val items = ListBuffer[((String,String,String),(Double,Double,Double,Double,Double,Long))]()
+    val items = ListBuffer[((String,String,String,String),(Double,Double,Double,Double,Double,Long))]()
 
     for(lookback <- lookbacks) {  // expand to one record per window
 
-      val serieName = event.getSerieName                //PART 1: 1
-      val sectorName = event.getSectorName.toString     //PART 1: 2
-      val windowSec = lookback.getWindowSec.toString    //PART 1: 3
+      val serieName = event.getSerieName                    //PART 1: 1
+      val sectorName = event.getSectorName.toString         //PART 1: 2
+      val windowSec = lookback.getWindowSec.toString        //PART 1: 3
+      val slideSec = lookback.getSlideIntervalSec.toString  //PART 1: 4
 
-      val toAdd = ((serieName, sectorName, windowSec),                    //PART 1
+      val toAdd = ((serieName, sectorName, windowSec, slideSec),          //PART 1
         (value, sum, count, mean, sumOfSquaredDeviations, timeInMsec))    //PART 2
 
       items += toAdd
@@ -189,7 +190,7 @@ case object StatFunctions extends Serializable {
   }
   // EMIT OUTPUT
   // Emit Row
-  val emitStats = (entry: ((String,String,String),(Double,Double,Double,Double,Double,Long))) => {
+  val emitStats = (entry: ((String,String,String,String),(Double,Double,Double,Double,Double,Long))) => {
     try {
       println(entry)
 
@@ -197,7 +198,7 @@ case object StatFunctions extends Serializable {
       case e: Exception => // e.printStackTrace()
     }
   }
-  val emitCoStats = (entry: ((String,String,String),(Double,Double,Long))) => {
+  val emitCoStats = (entry: ((String,String,String,String),(Double,Double,Long))) => {
     try {
       println(entry)
 
@@ -214,10 +215,10 @@ case object StatFunctions extends Serializable {
     }
   }
   // Emit RDD
-  val emitRddStats = (statRdd: RDD[((String,String,String),(Double,Double,Double,Double,Double,Long))]) => {
+  val emitRddStats = (statRdd: RDD[((String,String,String,String),(Double,Double,Double,Double,Double,Long))]) => {
     statRdd.collect().foreach(emitStats)
   }
-  val emitRddCoStats = (coStatRdd: RDD[((String,String,String),(Double,Double,Long))]) => {
+  val emitRddCoStats = (coStatRdd: RDD[((String,String,String,String),(Double,Double,Long))]) => {
     coStatRdd.collect().foreach(emitCoStats)
   }
 }
@@ -278,14 +279,11 @@ import scala.collection.mutable.ListBuffer
 val windowCoStatsDstreamJoinList = ListBuffer[DStream[(String,((Double,Double,Double,Double,Double,Long),String))]]()
 
 for(stream <- windowStatsDstreamList) {
-
   val windowDstreamToJoin = stream.transform(rdd => {
     rdd.map(item=>((item._1._3),(item._2, item._1._1)))   // tuple that only has key=window, and value=(unchanged,serieName)
   }
   )
-
   windowCoStatsDstreamJoinList += windowDstreamToJoin
-
 }
 
 
@@ -294,7 +292,7 @@ for(stream <- windowStatsDstreamList) {
 // UNBIASED STATISTICS: https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
 
 @transient
-val windowCoStatsDstreamList = ListBuffer[DStream[((String,String,String),(Double,Double,Long))]]()
+val windowCoStatsDstreamList = ListBuffer[DStream[((String,String,String,String),(Double,Double,Long))]]()
 
 for(stream1 <- windowStatsDstreamList) {    // 1
 
