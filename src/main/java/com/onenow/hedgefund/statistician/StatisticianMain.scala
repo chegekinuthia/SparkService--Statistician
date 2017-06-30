@@ -146,6 +146,13 @@ case object StatFunctions extends Serializable {
     }
     items.toList
   }
+  def getLatestTimestamp (timeInMsec1:Long, timeInMsec2:Long):Long = {
+    var timeInMSec1to2 = timeInMsec1
+    if(timeInMsec2>timeInMSec1to2) {
+      timeInMSec1to2 = timeInMsec2
+    }
+    return timeInMSec1to2
+  }
   // STRUCTURED STREAMING
   // https://spark.apache.org/docs/latest/streaming-programming-guide.html
   // https://docs.cloud.databricks.com/docs/latest/databricks_guide/07%20Spark%20Streaming/10%20Window%20Aggregations.html
@@ -318,12 +325,7 @@ for(stream1 <- windowCoStatsDstreamJoinList) {    // 1
       val coRrelation1to2 = instantCoVariance1to2 / standardDeviation1 / standardDeviation2    // [no unit]
 
       // time
-      val timeInMsec1 = joined._2._1._7
-      val timeInMsec2 = joined._2._2._7
-      var timeInMSec1to2 = timeInMsec1
-      if(timeInMsec2>timeInMSec1to2) {
-        timeInMSec1to2 = timeInMsec2
-      }
+      val timeInMSec1to2 = StatFunctions.getLatestTimestamp(joined._2._1._7, joined._2._2._7)
 
       // build
       val key = (joined._2._1._8, joined._2._2._8, joined._1._1, joined._1._2) // (serie1Name,Serie2Name,window,slide)
