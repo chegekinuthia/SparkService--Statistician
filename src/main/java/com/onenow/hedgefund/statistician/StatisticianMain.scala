@@ -255,7 +255,7 @@ val unionDstream = ssc.union(kinesisDstreams) // each row is Array[Byte]
 @transient
 val eventValuesAllWindowsDstream = (unionDstream
     .map(StatFunctions.getStringFromByteArray)                     // string from byte array, getStringFromByteArray
-    .map(StatFunctions.getDeserializedPairActivity)
+    .map(StatFunctions.getDeserializedPairActivity)  // TODO: convert to flatMap for when deserialization fails
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
     .flatMap(r => StatFunctions.getWindowValuesFromPairActivityList(r, lookbacks.toList))
