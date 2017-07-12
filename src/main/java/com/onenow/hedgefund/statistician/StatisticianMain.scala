@@ -40,9 +40,11 @@ import java.nio.ByteBuffer
 import scala.util.Random
 
 
-// == WINDOW LOOKBACKS ==
+// == SCALA
 import scala.collection.JavaConversions._
 import collection.mutable._
+
+// == WINDOW LOOKBACKS ==
 import com.onenow.hedgefund.lookback.{LookbackFactory, TradingLookback}
 val factory = new LookbackFactory()
 val lookbacks = factory.getFast
@@ -119,7 +121,7 @@ case object StatFunctions extends Serializable {
   }
   // UNBUNDLE
   // PairActivity -> ((serieName,sectorName,lookback) (d,d,d,d,d,d,d,d)) for every lookback window
-  val getWindowValuesFromPairActivity = (event:PairActivity, lookbacks:List[TradingLookback]) => {
+  val getWindowValuesFromPairActivityList = (event:PairActivity, lookbacks:List[TradingLookback]) => {
 
     val value = event.getStoredValue.toDouble   //PART 2: 1
     val sum = value                             //PART 2: 2
@@ -256,7 +258,7 @@ val eventValuesAllWindowsDstream = (unionDstream
     .map(StatFunctions.getDeserializedPairActivity)
     .filter(r => StatFunctions.isDataType(r, DataType.PRICE))
     .filter(r => StatFunctions.isDataTiming(r, DataTiming.REALTIME))
-    .flatMap(r => StatFunctions.getWindowValuesFromPairActivity(r, lookbacks.toList))
+    .flatMap(r => StatFunctions.getWindowValuesFromPairActivityList(r, lookbacks.toList))
   ).cache()
 // eventValuesAllWindowsDstream.print()
 
