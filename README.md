@@ -72,4 +72,20 @@ See startSpark.sh in the resources folder
 
 ### Monitoring
 
-http://localhost:4040/jobs/
+Locally at http://localhost:4040/jobs/
+
+
+# Project presentation
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.001.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.002.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.003.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.004.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.005.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.006.jpeg?raw=true "Title")
+
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.007.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.008.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.009.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.010.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.011.jpeg?raw=true "Title")
+![Alt text](readme/Pablo_RodriguezBertorello_InsightDatScience_FINAL.012.jpeg?raw=true "Title")
