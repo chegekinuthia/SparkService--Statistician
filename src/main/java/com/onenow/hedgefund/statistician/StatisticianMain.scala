@@ -50,7 +50,7 @@ object StatisticianMain {
 
 
   // == WINDOW LOOKBACKS ==
-  val factory: LookbackFactory = new LookbackFactory()
+  val factory = new LookbackFactory()
   val lookbacks = factory.getFast
 
   // == INSTANTIATE KINESIS ==
